@@ -6654,3 +6654,208 @@ textarea:focus-visible {
     transform: scale(1.1);
   }
 }
+
+/* ============================================
+   EVENT BUILDER — ANIMATIONS & UTILITIES
+   ============================================ */
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Hero metrics responsive */
+@media (max-width: 1100px) {
+  .eb-hero-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .eb-hero-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .eb-builder-layout {
+    flex-direction: column !important;
+  }
+  .eb-sidebar-sticky {
+    position: static !important;
+    width: 100% !important;
+  }
+}
+
+/* Smooth transitions for sidebar icon area */
+.sidebar-icon svg {
+  transition: transform 0.2s ease;
+}
+
+.sidebar-item:hover .sidebar-icon svg,
+.sidebar-item.active .sidebar-icon svg {
+  transform: scale(1.1);
+}
+
+/* Total preview card (legacy compat) */
+.total-preview-card {
+  background: var(--color-gray-50);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--border-radius-lg);
+  padding: var(--space-lg);
+  margin-top: var(--space-lg);
+}
+
+.total-preview-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-xs) 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-600);
+}
+
+.total-preview-row.total {
+  border-top: 2px solid var(--color-gray-200);
+  margin-top: var(--space-xs);
+  padding-top: var(--space-sm);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-gray-800);
+}
+
+.total-preview-row.discount .value {
+  color: var(--color-error);
+}
+
+/* Form grid (legacy compat) */
+.form-card {
+  background: white;
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--border-radius-xl);
+  padding: var(--space-xl);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--space-xl);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 12px;
+  margin-bottom: 12px;
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Action buttons */
+.action-buttons {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.btn-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--color-gray-200);
+  background: var(--color-gray-50);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  transition: all 0.15s ease;
+  color: var(--color-gray-600);
+}
+
+.btn-icon:hover {
+  background: var(--color-gray-200);
+  transform: translateY(-1px);
+}
+
+.btn-icon.success {
+  border-color: #bbf7d0;
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.btn-icon.success:hover {
+  background: #16a34a;
+  color: white;
+}
+
+.btn-icon.warning {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #f59e0b;
+}
+
+.btn-icon.danger {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.btn-icon.danger:hover {
+  background: #dc2626;
+  color: white;
+}
+
+/* Dashboard responsive grid */
+@media (max-width: 900px) {
+  .dashboard-two-col {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Details grid */
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.details-grid strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 4px;
+}
+
+.details-grid p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-gray-800);
+}
+
+.section-note {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-gray-800);
+  padding: 12px 0;
+  border-top: 1px solid var(--color-gray-200);
+  margin-top: 8px;
+  text-align: right;
+}
