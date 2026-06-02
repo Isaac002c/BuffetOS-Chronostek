@@ -30,6 +30,14 @@ const templatesRoutes = require('./routes/templatesRoutes');
 const app = express();
 
 // ============================================
+// TRUST PROXY
+// ============================================
+// Necessário para que req.ip e o rate-limiter usem o IP real do cliente
+// quando o Express está atrás de Nginx ou Vercel (que enviam X-Forwarded-For).
+// '1' = confia em 1 nível de proxy (Nginx → Express).
+app.set('trust proxy', 1);
+
+// ============================================
 // CORS
 // ============================================
 
