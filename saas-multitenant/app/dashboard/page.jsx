@@ -93,12 +93,12 @@ function DashboardContent() {
   const urlTab = searchParams.get('tab') || getDefaultTab();
 
   useEffect(() => {
-    // Verifica token no localStorage (mais confiável que checar string no cookie)
-    const token      = localStorage.getItem('token') || localStorage.getItem('auth-token');
+    // O JWT fica apenas no cookie httpOnly (não lido por JS).
+    // Verificamos presença dos dados de sessão salvos no login.
     const userData   = localStorage.getItem('user');
     const tenantData = localStorage.getItem('tenant');
 
-    if (!token || !userData) {
+    if (!userData) {
       router.push('/login');
       return;
     }
@@ -126,7 +126,7 @@ function DashboardContent() {
 
   const handleLogout = async () => {
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/auth/logout`, {
+      await fetch('/auth/logout', {
         method: 'POST',
         credentials: 'include',
       });
