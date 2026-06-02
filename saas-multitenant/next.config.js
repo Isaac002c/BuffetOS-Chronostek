@@ -44,7 +44,7 @@ const nextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: https:",
               "font-src 'self'",
-              "connect-src 'self' http://localhost:3000 http://127.0.0.1:3000 http://localhost:3001 http://127.0.0.1:3001 http://localhost:5000 http://127.0.0.1:5000 https://*.app.github.dev https://crm.chronostek.com.br",
+              "connect-src 'self' http://localhost:3000 http://127.0.0.1:3000 http://localhost:3001 http://127.0.0.1:3001 http://localhost:5000 http://127.0.0.1:5000 https://*.app.github.dev https://buffetos.chronostek.com.br https://crm.chronostek.com.br",
               "frame-ancestors 'none'",
               "object-src 'none'",
             ].join('; '),

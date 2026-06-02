@@ -47,6 +47,7 @@ const isProd = process.env.NODE_ENV === 'production';
 // Em dev: adicionar localhost e GitHub Codespaces para facilitar desenvolvimento.
 const buildAllowedOrigins = () => {
   const base = [
+    'https://buffetos.chronostek.com.br',
     'https://crm.chronostek.com.br',
   ];
 
