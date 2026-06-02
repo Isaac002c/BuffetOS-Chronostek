@@ -1,3 +1,4 @@
+const { safeError } = require('../utils/errorResponse');
 const express = require('express');
 const router = express.Router();
 const documentModel = require('../models/documentModels');
@@ -23,7 +24,7 @@ router.get('/', async (req, res) => {
     res.json({ success: true, data: documents });
   } catch (err) {
     console.error('Erro ao buscar documentos:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -44,7 +45,7 @@ router.get('/stats', async (req, res) => {
     });
   } catch (err) {
     console.error('Erro ao buscar stats:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -58,7 +59,7 @@ router.get('/contract/:contractId', async (req, res) => {
     res.json({ success: true, data: documents });
   } catch (err) {
     console.error('Erro ao buscar documentos do contrato:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -72,7 +73,7 @@ router.get('/client/:clientId', async (req, res) => {
     res.json({ success: true, data: documents });
   } catch (err) {
     console.error('Erro ao buscar documentos do cliente:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -91,7 +92,7 @@ router.get('/:id', async (req, res) => {
     res.json({ success: true, data: document });
   } catch (err) {
     console.error('Erro ao buscar documento:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -129,7 +130,7 @@ router.post('/', async (req, res) => {
     res.status(201).json({ success: true, data: document });
   } catch (err) {
     console.error('Erro ao criar documento:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -158,7 +159,7 @@ router.put('/:id', async (req, res) => {
     res.json({ success: true, data: document });
   } catch (err) {
     console.error('Erro ao atualizar documento:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -177,7 +178,7 @@ router.delete('/:id', async (req, res) => {
     res.json({ success: true, data: document, message: 'Documento deletado com sucesso' });
   } catch (err) {
     console.error('Erro ao deletar documento:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 

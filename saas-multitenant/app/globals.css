@@ -356,25 +356,6 @@ a {
   min-width: 0;
 }
 
-.page-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  color: #64748b;
-  font-size: 13px;
-}
-
-.page-tag {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  padding: 6px 12px;
-  background: rgba(59, 130, 246, 0.08);
-  color: #2563eb;
-  font-weight: 600;
-}
 
 .page-heading {
   min-width: 0;
@@ -400,49 +381,7 @@ a {
   flex-wrap: wrap;
 }
 
-.header-search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 280px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  padding: 8px 10px;
-}
 
-.search-input {
-  flex: 1;
-  border: none;
-  outline: none;
-  background: transparent;
-  font-size: 14px;
-  color: #1f2937;
-}
-
-.search-button {
-  width: 40px;
-  height: 40px;
-  background: #2563eb;
-  border: none;
-  color: white;
-  border-radius: 12px;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-}
-
-.icon-btn {
-  min-width: 44px;
-  min-height: 44px;
-  border-radius: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  background: #f8fafc;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  color: #334155;
-}
 
 .tenant-badge {
   display: flex;
@@ -562,46 +501,6 @@ a {
   letter-spacing: 0.5px;
 }
 
-.notice-message {
-  background: #f8fafc;
-  border: 1px solid #cbd5e1;
-  padding: 16px 18px;
-  border-radius: 14px;
-  color: #334155;
-  margin-top: 18px;
-  margin-bottom: 18px;
-}
-
-.breadcrumbs {
-  margin-top: 12px;
-}
-
-.breadcrumbs ol {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  color: #64748b;
-  font-size: 13px;
-}
-
-.breadcrumb-link {
-  color: #3b82f6;
-  transition: color 0.2s;
-}
-
-.breadcrumb-link:hover {
-  color: #1d4ed8;
-}
-
-.breadcrumb-separator {
-  color: #cbd5e1;
-}
-
-.breadcrumbs li.current span {
-  color: #0f172a;
-  font-weight: 600;
-}
 
 .dashboard-grid {
   display: grid;
@@ -6858,4 +6757,680 @@ textarea:focus-visible {
   border-top: 1px solid var(--color-gray-200);
   margin-top: 8px;
   text-align: right;
+}
+
+/* ============================================
+   MISSING UTILITY CLASSES
+   (used by Events.jsx, QuotationSimulator.jsx)
+   ============================================ */
+
+/* Base button — shared foundation */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--color-gray-200);
+  background: var(--color-gray-50);
+  color: var(--color-gray-700);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+  text-decoration: none;
+  line-height: 1;
+}
+.btn:hover:not(:disabled) {
+  background: var(--color-gray-100);
+  border-color: var(--color-gray-300);
+}
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.btn.btn-primary {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+.btn.btn-primary:hover:not(:disabled) {
+  background: var(--color-primary-dark);
+  border-color: var(--color-primary-dark);
+}
+.btn.btn-sm {
+  padding: 5px 10px;
+  font-size: var(--font-size-xs);
+  border-radius: var(--border-radius-sm);
+}
+.btn.btn-icon.danger,
+.btn.btn-sm.btn-icon.danger {
+  color: var(--color-error);
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+.btn.btn-icon.danger:hover,
+.btn.btn-sm.btn-icon.danger:hover {
+  background: var(--color-error);
+  color: #fff;
+}
+
+/* Form label */
+.form-label {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-gray-600);
+  margin-bottom: 5px;
+}
+
+/* Form input / select / textarea */
+.form-input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-800);
+  background: #fff;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-sizing: border-box;
+}
+.form-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+.form-input:disabled {
+  background: var(--color-gray-50);
+  color: var(--color-gray-400);
+}
+
+/* Alias: input-field = form-input (used in QuotationSimulator) */
+.input-field {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-gray-800);
+  background: #fff;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-sizing: border-box;
+}
+.input-field:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* Mode selector buttons (QuotationSimulator) */
+.mode-selector {
+  display: flex;
+  gap: 8px;
+  margin-bottom: var(--space-lg);
+}
+.mode-btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: 2px solid var(--color-gray-200);
+  border-radius: var(--border-radius-md);
+  background: #fff;
+  color: var(--color-gray-600);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+.mode-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+.mode-btn.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+}
+
+/* Template grid + buttons (QuotationSimulator) */
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+.template-btn {
+  padding: 12px;
+  border: 2px solid var(--color-gray-200);
+  border-radius: var(--border-radius-md);
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+}
+.template-btn:hover {
+  border-color: var(--color-primary);
+  background: #eff6ff;
+}
+.template-btn.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+}
+.template-name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: inherit;
+  display: block;
+  margin-bottom: 2px;
+}
+.template-items-count {
+  font-size: var(--font-size-xs);
+  color: var(--color-gray-400);
+  display: block;
+}
+.template-btn.active .template-items-count {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* ============================================
+   RESPONSIVIDADE GLOBAL — MOBILE / TABLET
+   ============================================ */
+
+/* ── Hamburger button (oculto no desktop) ── */
+.mobile-menu-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #334155;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+.mobile-menu-btn:hover {
+  background: #e2e8f0;
+}
+
+/* ── Tablet: sidebar colapsa (< 1120px já definido acima) ── */
+
+/* ── Mobile (≤ 768px) ── */
+@media (max-width: 768px) {
+
+  /* Mostrar hamburger */
+  .mobile-menu-btn {
+    display: flex;
+  }
+
+  /* Header compacto */
+  .global-header {
+    padding: 12px 16px;
+    gap: 10px;
+  }
+  .page-title {
+    font-size: 17px;
+  }
+  .header-subtitle,
+  .page-description {
+    display: none;
+  }
+  .header-tenant,
+  .header-role {
+    display: none !important;
+  }
+  .tenant-badge {
+    display: none;
+  }
+  .logout-btn-header {
+    padding: 7px 12px;
+    font-size: 12px;
+  }
+
+  /* Main area: reduz padding */
+  .main-area {
+    padding: 12px;
+  }
+
+  /* Sidebar: sempre drawer no mobile */
+  .content-shell {
+    margin-left: 0 !important;
+  }
+  .sidebar {
+    transform: translateX(-100%);
+    width: 260px !important;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  /* Tabelas: scroll horizontal */
+  table {
+    min-width: 500px;
+  }
+  .table-scroll-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 10px;
+  }
+
+  /* Kanban: scroll suave */
+  .kanban-board {
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+  .kanban-column {
+    scroll-snap-align: start;
+    flex: 0 0 88vw;
+    max-width: 88vw;
+  }
+
+  /* Forms: coluna única */
+  .form-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* KPI grid: 2 colunas no mobile */
+  .kpi-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px;
+  }
+
+  /* Dashboard two-col → stack */
+  .dashboard-two-col {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Quotation builder hero metrics: 3 cols no mobile */
+  .hero-metrics-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  /* Quotation builder layout: empilha no mobile */
+  .builder-layout {
+    flex-direction: column !important;
+  }
+  .builder-sidebar {
+    width: 100% !important;
+  }
+
+  /* Modais: fullscreen no mobile */
+  .modal-fullscreen-mobile {
+    max-width: 100vw !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Calendário: células menores */
+  .calendar-day {
+    min-height: 56px;
+    padding: 4px;
+    font-size: 12px;
+  }
+  .calendar-weekday {
+    font-size: 11px;
+    padding: 8px 4px;
+  }
+
+  /* Padding reduzido nas páginas */
+  .page-content-mobile {
+    padding: 12px !important;
+  }
+}
+
+/* ── Tablet (769px – 1120px) ── */
+@media (min-width: 769px) and (max-width: 1120px) {
+
+  /* Sidebar: drawer (toggle via botão) */
+  .content-shell {
+    margin-left: 0;
+  }
+  .sidebar {
+    transform: translateX(-100%);
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  /* Mostrar hamburger no tablet também */
+  .mobile-menu-btn {
+    display: flex;
+  }
+
+  /* Header: menos padding */
+  .global-header {
+    padding: 14px 20px;
+  }
+
+  /* KPI: 2 colunas */
+  .kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  /* Hero metrics: 3 cols */
+  .hero-metrics-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+
+  /* Dashboard two-col → stack */
+  .dashboard-two-col {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Charts: carousel no tablet */
+  .charts-grid {
+    display: flex !important;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 14px !important;
+    padding-bottom: 10px;
+    grid-template-columns: unset !important;
+  }
+  .charts-grid::-webkit-scrollbar { display: none; }
+  .charts-grid > * {
+    scroll-snap-align: start;
+    flex-shrink: 0 !important;
+    min-width: 420px;
+  }
+
+  /* Billing KPI: 4 colunas no tablet */
+  .billing-kpi-grid {
+    grid-template-columns: repeat(4, 1fr) !important;
+  }
+
+}
+
+/* ── Animação slideInRight para toasts ── */
+@keyframes slideInRight {
+  from { transform: translateX(100px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+/* ── Animação slideUp ── */
+@keyframes slideUp {
+  from { transform: translateY(40px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* ═══════════════════════════════════════════════
+   MELHORIAS GERAIS DE UX/UI MOBILE
+   ═══════════════════════════════════════════════ */
+
+/* Suaviza fontes em qualquer dispositivo */
+html { -webkit-text-size-adjust: 100%; }
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Garante que SVGs/imagens não estouram larguras no mobile */
+img, svg { max-width: 100%; }
+
+/* Scrollbar fina em containers com scroll horizontal padrão */
+.kanban-board::-webkit-scrollbar { height: 6px; }
+.kanban-board::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+/* Touch target mínimo: 36px em botões nativos comuns no mobile */
+@media (max-width: 768px) {
+  button, .btn {
+    min-height: 36px;
+  }
+  /* Botões com text + emoji pequenos não precisam altura grande */
+  button.btn-sm,
+  .btn.btn-sm {
+    min-height: 28px;
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   MOBILE TIPOGRAFIA + LAYOUT GERAL
+   ═══════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+
+  /* Headings — reduz no mobile para sobrar espaço útil */
+  h1 { font-size: 19px !important; line-height: 1.25; }
+  h2 { font-size: 18px !important; }
+  h3 { font-size: 15px !important; }
+
+  /* Page header titles dentro dos componentes inline */
+  .module-content h1 {
+    font-size: 19px !important;
+  }
+  .module-content h2 {
+    font-size: 17px !important;
+  }
+
+  /* Body geral */
+  body {
+    font-size: 14px;
+  }
+
+  /* Reduz margin geral do main */
+  .main-area {
+    padding: 10px !important;
+  }
+
+  /* Limpa min-height do calendar título (era 180px, quebra layout mobile) */
+  .calendar-toolbar-title {
+    min-width: 0 !important;
+    font-size: 14px !important;
+  }
+
+  /* Botões em barras de ação: empilham se necessário */
+  .actions-bar,
+  .form-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* Inputs/selects: previne zoom no iOS (precisa ser >=16px no focus) */
+  .form-input,
+  .input-field,
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="date"],
+  input[type="time"],
+  textarea,
+  select {
+    font-size: 16px !important;
+    padding: 9px 12px;
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   CAROUSEL & SCROLL HORIZONTAL — MOBILE
+   ═══════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+
+  /* ── Páginas Buffet: padding compactado ── */
+  .billing-page-wrap,
+  .page-buffet-wrap {
+    padding: 14px !important;
+    max-width: 100% !important;
+  }
+
+  /* Reset de tamanho de texto longo em cards e títulos no mobile */
+  .page-buffet-wrap h1,
+  .billing-page-wrap h1 {
+    font-size: 20px !important;
+    line-height: 1.25 !important;
+  }
+  .page-buffet-wrap h2,
+  .billing-page-wrap h2 {
+    font-size: 19px !important;
+    line-height: 1.3 !important;
+  }
+  .page-buffet-wrap h3,
+  .billing-page-wrap h3 {
+    font-size: 15px !important;
+  }
+
+  /* Botão "Novo X" do header: width auto, compacto */
+  .page-buffet-wrap > div:first-of-type button.btn-primary,
+  .page-buffet-wrap > div:first-of-type > button {
+    flex-shrink: 0;
+  }
+
+  /* Search input + actions: stack natural com flex-wrap */
+  .page-buffet-wrap input[type="search"],
+  .page-buffet-wrap input.form-input {
+    min-width: 0;
+  }
+
+  /* ── Billing: KPI cards — 2 colunas compactas ── */
+  .billing-kpi-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  /* ── Billing: monthly summary — 2 colunas ── */
+  .billing-summary-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  /* ── Dashboard: KPI carousel ── */
+  .dashboard-kpi-grid {
+    display: flex !important;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 8px;
+    gap: 12px !important;
+    grid-template-columns: unset !important;
+  }
+  .dashboard-kpi-grid::-webkit-scrollbar { display: none; }
+  .dashboard-kpi-grid > * {
+    scroll-snap-align: start;
+    flex-shrink: 0 !important;
+    min-width: 72vw;
+    max-width: 72vw;
+  }
+
+  /* ── Events: KPI carousel ── */
+  .events-kpi-grid {
+    display: flex !important;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 8px;
+    gap: 10px !important;
+    grid-template-columns: unset !important;
+  }
+  .events-kpi-grid::-webkit-scrollbar { display: none; }
+  .events-kpi-grid > * {
+    scroll-snap-align: start;
+    flex-shrink: 0 !important;
+    min-width: 64vw;
+    max-width: 64vw;
+  }
+
+  /* ── Quotations: cards carousel ── */
+  .quotations-cards-grid {
+    display: flex !important;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 8px;
+    gap: 16px !important;
+    grid-template-columns: unset !important;
+  }
+  .quotations-cards-grid::-webkit-scrollbar { display: none; }
+  .quotations-cards-grid > * {
+    scroll-snap-align: start;
+    flex-shrink: 0 !important;
+    min-width: 86vw;
+    max-width: 86vw;
+  }
+
+  /* ── Billing/Financeiro: charts carousel ── */
+  .charts-grid {
+    display: flex !important;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 12px;
+    gap: 14px !important;
+    grid-template-columns: unset !important;
+  }
+  .charts-grid::-webkit-scrollbar { display: none; }
+  .charts-grid > * {
+    scroll-snap-align: start;
+    flex-shrink: 0 !important;
+    min-width: 88vw;
+    max-width: 88vw;
+  }
+
+  /* ── Calendar: wrapper compacto, sem scroll horizontal ── */
+  .calendar-scroll-wrap {
+    padding: 6px !important;
+    border-radius: 12px;
+  }
+
+  /* Toolbar: empilha verticalmente no mobile */
+  .calendar-toolbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    padding: 10px 12px !important;
+    gap: 8px !important;
+  }
+  .calendar-nav-group {
+    justify-content: space-between;
+  }
+  .calendar-toolbar-title {
+    flex: 1;
+    min-width: 0 !important;
+    text-align: center;
+    font-size: 14px !important;
+  }
+  .calendar-view-group {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  /* Cells do calendar: bem compactas no mobile */
+  .calendar-month-grid > div {
+    min-height: 52px !important;
+    padding: 3px !important;
+    font-size: 11px !important;
+  }
+  .calendar-weekdays-row > div {
+    padding: 6px 2px !important;
+    font-size: 10px !important;
+  }
+
+  /* ── Team: ocultar tabela, mostrar cards ── */
+  .team-table-wrap {
+    display: none !important;
+  }
+  .team-cards-wrap {
+    display: flex !important;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* ── Forms: grid de campos vira 1 coluna no mobile ── */
+  .form-grid {
+    grid-template-columns: 1fr !important;
+  }
 }

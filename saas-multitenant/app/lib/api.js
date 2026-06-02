@@ -23,39 +23,10 @@ API_URL = API_URL || '';
 export const getApiUrl = () => API_URL;
 
 const getAuthHeaders = () => {
-  if (typeof window === 'undefined') {
-    return { 'Content-Type': 'application/json' };
-  }
-
-  let token = null;
-
-  // 1. Tentar localStorage
-  token = localStorage.getItem('token');
-  if (!token) {
-    token = localStorage.getItem('auth-token');
-  }
-
-  // 2. Se não houver no localStorage, tentar cookies
-  if (!token && document.cookie) {
-    const cookies = {};
-    document.cookie.split(';').forEach(cookie => {
-      const [key, value] = cookie.trim().split('=');
-      if (key && value) {
-        cookies[key] = decodeURIComponent(value);
-      }
-    });
-    token = cookies['auth-token'] || cookies['token'];
-  }
-
-  const headers = {
-    'Content-Type': 'application/json',
-  };
-
-  if (token && token.trim()) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  return headers;
+  // O token JWT trafega apenas via cookie httpOnly (definido pelo backend no login).
+  // credentials: 'include' em cada fetch garante o envio automático do cookie.
+  // Não lemos nem escrevemos o JWT em localStorage — isso previne roubo via XSS.
+  return { 'Content-Type': 'application/json' };
 };
 
 export const apiRequest = async (endpoint, options = {}) => {
@@ -63,10 +34,6 @@ export const apiRequest = async (endpoint, options = {}) => {
   const url = `${API_URL}${endpoint}`;
 
   const authHeaders = getAuthHeaders();
-
-  console.log('🌐 API_URL:', API_URL || '(relativo — usando proxy Next.js)');
-  console.log('➡️ Request:', url);
-  console.log('📋 Headers:', { ...authHeaders, Authorization: authHeaders.Authorization ? '[TOKEN PRESENTE]' : 'undefined' });
 
   const res = await fetch(url, {
     method: options.method || 'GET',
@@ -90,7 +57,9 @@ export const apiRequest = async (endpoint, options = {}) => {
       errorMessage = text || errorMessage;
     }
 
-    console.error('❌ API ERROR:', errorMessage);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error(`❌ [${res.status}] ${endpoint}:`, errorMessage);
+    }
     throw new Error(errorMessage);
   }
 

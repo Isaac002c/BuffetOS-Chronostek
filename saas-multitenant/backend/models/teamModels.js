@@ -7,9 +7,10 @@ const teamModel = {
   async getAll(tenantId) {
     try {
       const result = await pool.query(
-        `SELECT id, tenant_id, nome, cpf, rg, email, chave_pix, funcao, is_active, created_at, updated_at
-         FROM team_members 
-         WHERE tenant_id = $1 
+        `SELECT id, tenant_id, nome, cpf, rg, email, chave_pix, funcao, is_active,
+                custo_diaria, disponibilidade, status, observacoes, created_at, updated_at
+         FROM team_members
+         WHERE tenant_id = $1
          ORDER BY nome ASC`,
         [tenantId]
       );
@@ -24,8 +25,9 @@ const teamModel = {
   async getById(id, tenantId) {
     try {
       const result = await pool.query(
-        `SELECT id, tenant_id, nome, cpf, rg, email, chave_pix, funcao, is_active, created_at, updated_at
-         FROM team_members 
+        `SELECT id, tenant_id, nome, cpf, rg, email, chave_pix, funcao, is_active,
+                custo_diaria, disponibilidade, status, observacoes, created_at, updated_at
+         FROM team_members
          WHERE id = $1 AND tenant_id = $2`,
         [id, tenantId]
       );
@@ -37,17 +39,17 @@ const teamModel = {
   },
 
   // Criar membro da equipe
-  async create({ tenant_id, nome, cpf, rg, email, chave_pix, funcao = 'Garcom' }) {
+  async create({ tenant_id, nome, cpf, rg, email, chave_pix, funcao = 'Garcom', custo_diaria, disponibilidade, status = 'ativo', observacoes }) {
     try {
       if (!tenant_id) {
         throw new Error('tenant_id é obrigatório para criar um membro da equipe');
       }
-      
+
       const result = await pool.query(
-        `INSERT INTO team_members (tenant_id, nome, cpf, rg, email, chave_pix, funcao, is_active)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, true)
-         RETURNING id, tenant_id, nome, cpf, rg, email, chave_pix, funcao, is_active, created_at, updated_at`,
-        [tenant_id, nome, cpf, rg, email, chave_pix, funcao]
+        `INSERT INTO team_members (tenant_id, nome, cpf, rg, email, chave_pix, funcao, is_active, custo_diaria, disponibilidade, status, observacoes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $9, $10, $11)
+         RETURNING id, tenant_id, nome, cpf, rg, email, chave_pix, funcao, is_active, custo_diaria, disponibilidade, status, observacoes, created_at, updated_at`,
+        [tenant_id, nome, cpf, rg, email, chave_pix, funcao, custo_diaria || null, disponibilidade || null, status, observacoes || null]
       );
       return result.rows[0];
     } catch (err) {
@@ -57,21 +59,25 @@ const teamModel = {
   },
 
   // Atualizar membro da equipe
-  async update(id, { nome, cpf, rg, email, chave_pix, funcao, is_active }, tenantId) {
+  async update(id, { nome, cpf, rg, email, chave_pix, funcao, is_active, custo_diaria, disponibilidade, status, observacoes }, tenantId) {
     try {
       const result = await pool.query(
-        `UPDATE team_members 
-         SET nome = COALESCE($1, nome),
-             cpf = COALESCE($2, cpf),
-             rg = COALESCE($3, rg),
-             email = COALESCE($4, email),
-             chave_pix = COALESCE($5, chave_pix),
-             funcao = COALESCE($6, funcao),
-             is_active = COALESCE($7, is_active),
-             updated_at = NOW()
-         WHERE id = $8 AND tenant_id = $9
-         RETURNING id, tenant_id, nome, cpf, rg, email, chave_pix, funcao, is_active, created_at, updated_at`,
-        [nome, cpf, rg, email, chave_pix, funcao, is_active, id, tenantId]
+        `UPDATE team_members
+         SET nome            = COALESCE($1, nome),
+             cpf             = COALESCE($2, cpf),
+             rg              = COALESCE($3, rg),
+             email           = COALESCE($4, email),
+             chave_pix       = COALESCE($5, chave_pix),
+             funcao          = COALESCE($6, funcao),
+             is_active       = COALESCE($7, is_active),
+             custo_diaria    = COALESCE($8, custo_diaria),
+             disponibilidade = COALESCE($9, disponibilidade),
+             status          = COALESCE($10, status),
+             observacoes     = COALESCE($11, observacoes),
+             updated_at      = NOW()
+         WHERE id = $12 AND tenant_id = $13
+         RETURNING id, tenant_id, nome, cpf, rg, email, chave_pix, funcao, is_active, custo_diaria, disponibilidade, status, observacoes, created_at, updated_at`,
+        [nome, cpf, rg, email, chave_pix, funcao, is_active, custo_diaria || null, disponibilidade || null, status || null, observacoes || null, id, tenantId]
       );
       return result.rows[0];
     } catch (err) {

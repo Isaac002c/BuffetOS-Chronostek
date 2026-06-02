@@ -3,11 +3,52 @@
 
 const pool = require('../config/db');
 
+// ── Auto-create tables on first use ──────────────────────────────────────────
+let tablesReady = false;
+
+async function ensureTables() {
+  if (tablesReady) return;
+
+  // pgcrypto só é necessário em PG < 13 — ignorar falha de permissão
+  // PG 13+ tem gen_random_uuid() embutido sem extensão
+  try { await pool.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`); } catch (_) {}
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS event_templates (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      tenant_id   UUID NOT NULL,
+      name        VARCHAR(255) NOT NULL,
+      description TEXT,
+      event_type  VARCHAR(100),
+      created_at  TIMESTAMPTZ DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS template_items (
+      id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      template_id         UUID NOT NULL REFERENCES event_templates(id) ON DELETE CASCADE,
+      tenant_id           UUID NOT NULL,
+      name                VARCHAR(255) NOT NULL,
+      unit                VARCHAR(50) NOT NULL DEFAULT 'unidade',
+      quantity_per_person DECIMAL(10,4) NOT NULL DEFAULT 1,
+      cost_per_unit       DECIMAL(10,2) NOT NULL DEFAULT 0,
+      created_at          TIMESTAMPTZ DEFAULT NOW(),
+      updated_at          TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_event_templates_tenant  ON event_templates(tenant_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_template_items_template ON template_items(template_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_template_items_tenant   ON template_items(tenant_id)`);
+  tablesReady = true;
+}
+
 // ============================================
 // EVENT TEMPLATES
 // ============================================
 
 async function createEventTemplate({ tenant_id, name, description, event_type }) {
+  await ensureTables();
   const query = `
     INSERT INTO event_templates (tenant_id, name, description, event_type, created_at, updated_at)
     VALUES ($1, $2, $3, $4, NOW(), NOW())
@@ -18,6 +59,7 @@ async function createEventTemplate({ tenant_id, name, description, event_type })
 }
 
 async function getAllEventTemplates(tenant_id) {
+  await ensureTables();
   const query = `
     SELECT * FROM event_templates 
     WHERE tenant_id = $1 

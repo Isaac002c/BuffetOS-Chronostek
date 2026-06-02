@@ -4,17 +4,38 @@ const bcryptjs = require('bcryptjs');
 const pool = require('../config/db');
 
 /**
+ * Middleware: bloqueia o endpoint de setup se ALLOW_SETUP !== 'true'.
+ * Em produção, exige adicionalmente o header X-Setup-Secret correspondente
+ * à variável de ambiente SETUP_SECRET.
+ */
+function requireSetupAccess(req, res, next) {
+  if (process.env.ALLOW_SETUP !== 'true') {
+    return res.status(403).json({
+      success: false,
+      message: 'Setup desabilitado. Defina ALLOW_SETUP=true para habilitar.',
+    });
+  }
+
+  // Em produção exige segredo adicional para evitar uso acidental
+  if (process.env.NODE_ENV === 'production') {
+    const secret = process.env.SETUP_SECRET;
+    if (!secret || req.headers['x-setup-secret'] !== secret) {
+      return res.status(403).json({
+        success: false,
+        message: 'Header X-Setup-Secret inválido ou ausente',
+      });
+    }
+  }
+
+  next();
+}
+
+/**
  * 🚀 POST /setup/create-test-user
  * Cria um usuário de teste no banco de dados
  * Apenas para DESENVOLVIMENTO!
  */
-router.post('/create-test-user', async (req, res) => {
-  if (process.env.NODE_ENV === 'production') {
-    return res.status(403).json({
-      success: false,
-      message: 'Endpoint desabilitado em produção'
-    });
-  }
+router.post('/create-test-user', requireSetupAccess, async (req, res) => {
 
   let client;
   try {

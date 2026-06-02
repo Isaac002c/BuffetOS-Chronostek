@@ -8,8 +8,9 @@ function computeQuotationTotal(items = []) {
   }, 0);
 }
 
-async function createQuotation({ client_id, event_type, guest_count, event_date, items = [], notes = '', tenant_id }) {
-  const total = computeQuotationTotal(items);
+async function createQuotation({ client_id, lead_id, event_type, guest_count, event_date, items = [], notes = '', tenant_id, discount_percent = 0 }) {
+  const subtotal = computeQuotationTotal(items);
+  const total = subtotal * (1 - (Number(discount_percent) || 0) / 100);
 
   const client = await pool.connect();
   try {
@@ -17,20 +18,22 @@ async function createQuotation({ client_id, event_type, guest_count, event_date,
 
     const query = `
       INSERT INTO quotations
-        (tenant_id, client_id, event_type, guest_count, event_date, total_amount, status, notes, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+        (tenant_id, client_id, lead_id, event_type, guest_count, event_date, total_amount, status, notes, discount_percent, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
       RETURNING *
     `;
 
     const result = await client.query(query, [
       tenant_id,
-      client_id,
+      client_id || null,
+      lead_id   || null,
       event_type,
       guest_count,
-      event_date,
+      event_date || null,
       total,
       'draft',
       notes,
+      Number(discount_percent) || 0,
     ]);
 
     const quotationId = result.rows[0].id;
@@ -112,19 +115,25 @@ async function getQuotationDetail(quotationId, tenant_id) {
 
 async function updateQuotation(quotationId, data, tenant_id) {
   if (Array.isArray(data.items)) {
-    data.total_amount = computeQuotationTotal(data.items);
+    const subtotal = computeQuotationTotal(data.items);
+    const pct = Number(data.discount_percent) || 0;
+    data.total_amount = subtotal * (1 - pct / 100);
   }
 
   const fields = [];
   const values = [];
   let paramCount = 1;
 
-  const updatableFields = ['client_id', 'event_type', 'guest_count', 'event_date', 'total_amount', 'status', 'notes', 'validity_days'];
+  const updatableFields = ['client_id', 'lead_id', 'event_type', 'guest_count', 'event_date', 'total_amount', 'status', 'notes', 'validity_days', 'discount_percent'];
+  // Campos que não podem ser string vazia no PostgreSQL — converte para null
+  const nullableFields  = new Set(['client_id', 'lead_id', 'event_date']);
 
   for (const field of updatableFields) {
     if (Object.prototype.hasOwnProperty.call(data, field)) {
+      const raw   = data[field];
+      const value = nullableFields.has(field) && (raw === '' || raw === undefined) ? null : raw;
       fields.push(`${field} = $${paramCount}`);
-      values.push(data[field]);
+      values.push(value);
       paramCount++;
     }
   }
@@ -188,7 +197,7 @@ async function deleteQuotation(quotationId, tenant_id) {
   return result.rowCount > 0;
 }
 
-async function duplicateQuotation(quotationId, tenant_id, clientId) {
+async function duplicateQuotation(quotationId, tenant_id, clientId, leadId) {
   const original = await getQuotationDetail(quotationId, tenant_id);
   if (!original) {
     return null;
@@ -196,7 +205,8 @@ async function duplicateQuotation(quotationId, tenant_id, clientId) {
 
   const newQuotation = await createQuotation({
     tenant_id,
-    client_id: clientId,
+    client_id: clientId !== undefined ? clientId : original.client_id,
+    lead_id:   leadId   !== undefined ? leadId   : original.lead_id,
     event_type: original.event_type,
     guest_count: original.guest_count,
     event_date: original.event_date,
@@ -217,7 +227,9 @@ async function setQuotationStatus(quotationId, status, tenant_id) {
     return null;
   }
 
-  const total = computeQuotationTotal(quotation.items);
+  const subtotal = computeQuotationTotal(quotation.items);
+  const pct = Number(quotation.discount_percent) || 0;
+  const total = subtotal * (1 - pct / 100);
   const result = await pool.query(
     `UPDATE quotations
      SET status = $1,

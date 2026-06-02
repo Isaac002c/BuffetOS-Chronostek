@@ -1,8 +1,19 @@
+const { safeError } = require('../utils/errorResponse');
 const express = require('express');
 const router = express.Router();
 const permissionModel = require('../models/permissionModels');
 const { checkPermission, requireAdminOrManager, getAllRoles } = require('../middlewares/checkPermission');
 const saasModel = require('../models/saasModels');
+const pool = require('../config/db');
+const { rateLimitByUser } = require('../middlewares/rateLimitByUser');
+const { logAudit } = require('../utils/auditLog');
+
+// Rate limit específico para troca de senha: 5 tentativas/hora/usuário
+const passwordChangeLimiter = rateLimitByUser({
+  windowMs: 60 * 60 * 1000, // 1 hora
+  max: 5,
+  message: 'Muitas trocas de senha. Aguarde 1 hora.',
+});
 
 // GET /api/users/management - Listar usuários do tenant
 router.get('/', checkPermission('users:read'), async (req, res) => {
@@ -12,7 +23,7 @@ router.get('/', checkPermission('users:read'), async (req, res) => {
     res.json({ success: true, data: users });
   } catch (err) {
     console.error('Erro ao buscar usuários:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -27,12 +38,12 @@ router.get('/stats', checkPermission('users:read'), async (req, res) => {
     res.json({ success: true, data: { stats, total } });
   } catch (err) {
     console.error('Erro ao buscar stats:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
-// GET /api/users/management/roles - Listar roles disponíveis
-router.get('/roles', async (req, res) => {
+// GET /api/users/management/roles - Listar roles disponíveis (requer permissão)
+router.get('/roles', checkPermission('users:read'), async (req, res) => {
   try {
     const roles = getAllRoles();
     const permissionsMap = {
@@ -50,7 +61,7 @@ router.get('/roles', async (req, res) => {
     res.json({ success: true, data: rolesWithDesc });
   } catch (err) {
     console.error('Erro ao buscar roles:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -69,7 +80,7 @@ router.get('/:id', checkPermission('users:read'), async (req, res) => {
     res.json({ success: true, data: user });
   } catch (err) {
     console.error('Erro ao buscar usuário:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -78,12 +89,31 @@ router.post('/', requireAdminOrManager, async (req, res) => {
   try {
     const { name, email, password, role = 'viewer' } = req.body;
     const tenantId = req.tenantId;
-    
+
     if (!name || !email || !password) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Nome, email e senha são obrigatórios' 
+      return res.status(400).json({
+        success: false,
+        error: 'Nome, email e senha são obrigatórios'
       });
+    }
+
+    // Apenas admin pode criar outro admin
+    const ALLOWED_ROLES = ['admin', 'manager', 'operator', 'seller', 'viewer'];
+    if (!ALLOWED_ROLES.includes(role)) {
+      return res.status(400).json({ success: false, error: 'Role inválida' });
+    }
+    if (role === 'admin' && req.userRole !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Apenas administradores podem criar outro administrador' });
+    }
+
+    // Validação de email
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ success: false, error: 'Email inválido' });
+    }
+
+    // Complexidade mínima de senha
+    if (password.length < 8) {
+      return res.status(400).json({ success: false, error: 'A senha deve ter no mínimo 8 caracteres' });
     }
     
     // Verificar se email já existe
@@ -117,7 +147,7 @@ router.post('/', requireAdminOrManager, async (req, res) => {
     res.status(201).json({ success: true, data: user });
   } catch (err) {
     console.error('Erro ao criar usuário:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -129,11 +159,12 @@ router.put('/:id', checkPermission('users:update'), async (req, res) => {
     const tenantId = req.tenantId;
     
     // Usuário só pode ser atualizado por admin/manager ou pelo próprio usuário
+    // String() garante comparação correta mesmo se userId vier como número no JWT
     const currentUserRole = req.userRole;
-    if (currentUserRole !== 'admin' && currentUserRole !== 'manager' && req.userId !== id) {
-      return res.status(403).json({ 
-        success: false, 
-        error: 'Você só pode atualizar seu próprio perfil' 
+    if (currentUserRole !== 'admin' && currentUserRole !== 'manager' && String(req.userId) !== String(id)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Você só pode atualizar seu próprio perfil'
       });
     }
     
@@ -144,7 +175,7 @@ router.put('/:id', checkPermission('users:update'), async (req, res) => {
     }
     
     // Se não for admin, não pode mudar role de outros usuários
-    if (currentUserRole !== 'admin' && req.userId !== id && role) {
+    if (currentUserRole !== 'admin' && String(req.userId) !== String(id) && role) {
       return res.status(403).json({ 
         success: false, 
         error: 'Você não pode alterar a função de outros usuários' 
@@ -172,12 +203,12 @@ router.put('/:id', checkPermission('users:update'), async (req, res) => {
     res.json({ success: true, data: user });
   } catch (err) {
     console.error('Erro ao atualizar usuário:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
 // PATCH /api/users/management/:id/password - Alterar senha
-router.patch('/:id/password', async (req, res) => {
+router.patch('/:id/password', passwordChangeLimiter, async (req, res) => {
   try {
     const { id } = req.params;
     const { password } = req.body;
@@ -191,15 +222,29 @@ router.patch('/:id/password', async (req, res) => {
     }
     
     // Usuário só pode alterar senha do próprio usuário ou admin
-    if (req.userRole !== 'admin' && req.userId !== id) {
-      return res.status(403).json({ 
-        success: false, 
-        error: 'Você só pode alterar sua própria senha' 
+    if (req.userRole !== 'admin' && String(req.userId) !== String(id)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Você só pode alterar sua própria senha'
+      });
+    }
+
+    // Complexidade mínima de senha
+    if (password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        error: 'A senha deve ter no mínimo 8 caracteres'
       });
     }
     
     await permissionModel.updateUserPassword(id, password, tenantId);
-    
+
+    // Invalida todos os tokens anteriores do usuário (segurança pós-troca de senha)
+    await pool.query(
+      'UPDATE users SET token_version = token_version + 1 WHERE id = $1 AND tenant_id = $2',
+      [id, tenantId]
+    );
+
     // Log de atividade
     await saasModel.createActivityLog({
       tenant_id: tenantId,
@@ -209,11 +254,14 @@ router.patch('/:id/password', async (req, res) => {
       entity_id: id,
       description: 'Senha atualizada'
     });
-    
+
+    // Audit log de segurança
+    logAudit(req, 'password_changed', 'user', id, { changed_by: req.userId });
+
     res.json({ success: true, message: 'Senha atualizada com sucesso' });
   } catch (err) {
     console.error('Erro ao alterar senha:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -224,7 +272,7 @@ router.delete('/:id', requireAdminOrManager, async (req, res) => {
     const tenantId = req.tenantId;
     
     // Não pode deletar a si mesmo
-    if (req.userId === id) {
+    if (String(req.userId) === String(id)) {
       return res.status(400).json({ 
         success: false, 
         error: 'Você não pode excluir seu próprio usuário' 
@@ -252,7 +300,7 @@ router.delete('/:id', requireAdminOrManager, async (req, res) => {
     res.json({ success: true, message: 'Usuário deletado com sucesso' });
   } catch (err) {
     console.error('Erro ao deletar usuário:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 

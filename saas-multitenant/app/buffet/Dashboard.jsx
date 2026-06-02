@@ -131,21 +131,18 @@ export default function Dashboard() {
   const loadMetrics = async () => {
     setLoading(true);
     try {
-      const [quotationsRes, eventsRes, billingRes, teamRes] = await Promise.all([
-        apiRequest('/quotations').catch(() => []),
-        apiRequest('/events').catch(() => []),
-        apiRequest('/billing').catch(() => []),
-        apiRequest('/team').catch(() => []),
+      const [quotationsRes, eventsRes, billingStats, teamRes] = await Promise.all([
+        apiRequest('/api/quotations').catch(() => []),
+        apiRequest('/api/events').catch(() => []),
+        apiRequest('/api/billing/stats').catch(() => null),
+        apiRequest('/api/team').catch(() => []),
       ]);
 
       const quotations = Array.isArray(quotationsRes?.data ?? quotationsRes) ? (quotationsRes?.data ?? quotationsRes) : [];
       const events     = Array.isArray(eventsRes?.data ?? eventsRes) ? (eventsRes?.data ?? eventsRes) : [];
-      const billing    = Array.isArray(billingRes?.data ?? billingRes) ? (billingRes?.data ?? billingRes) : [];
       const team       = Array.isArray(teamRes?.data ?? teamRes) ? (teamRes?.data ?? teamRes) : [];
 
-      const revenue = billing
-        .filter(b => b.status === 'paid')
-        .reduce((s, b) => s + Number(b.amount || 0), 0);
+      const revenue = Number(billingStats?.data?.total_revenue_all ?? billingStats?.total_revenue_all ?? 0);
 
       const approved = quotations.filter(q => q.status === 'approved').length;
       const pending  = quotations.filter(q => q.status === 'draft').length;
@@ -188,7 +185,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div style={{ padding: '0 0 40px' }}>
+    <div className="page-buffet-wrap" style={{ padding: '0 0 40px' }}>
       {/* Page Title */}
       <div style={{ marginBottom: 28, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div>
@@ -210,7 +207,7 @@ export default function Dashboard() {
       </div>
 
       {/* KPI Grid */}
-      <div style={{
+      <div className="dashboard-kpi-grid" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
         gap: 16,
@@ -233,7 +230,7 @@ export default function Dashboard() {
           loading={loading}
         />
         <KpiCard
-          label="Eventos"
+          label="Calendário"
           value={metrics.events}
           sub="Total agendado"
           icon="📅"
@@ -251,7 +248,7 @@ export default function Dashboard() {
       </div>
 
       {/* Two-column layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20 }}>
+      <div className="dashboard-two-col" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20 }}>
 
         {/* Left: Recent quotations */}
         <div style={{

@@ -1,39 +1,83 @@
 // middlewares/checkPermission.js
 // Middleware para verificar permissões do usuário
+const { logAudit } = require('../utils/auditLog');
 
 // Definição de permissões por role
 const rolePermissions = {
   admin: [
+    // users
     'users:create', 'users:read', 'users:update', 'users:delete',
+    // clients
     'clients:create', 'clients:read', 'clients:update', 'clients:delete',
+    // contracts
     'contracts:create', 'contracts:read', 'contracts:update', 'contracts:delete',
+    // documents
     'documents:create', 'documents:read', 'documents:update', 'documents:delete',
+    // reports
     'reports:read', 'reports:export',
+    // settings
     'settings:read', 'settings:update',
-    'billing:read', 'billing:update'
+    // billing / finance
+    'billing:read', 'billing:update',
+    'finance:read', 'finance:update', 'finance:delete',
+    // quotations
+    'quotations:read', 'quotations:create', 'quotations:update', 'quotations:delete',
+    'quotations:approve', 'quotations:cancel', 'quotations:convert',
+    // events
+    'events:read', 'events:create', 'events:update', 'events:delete',
+    // team
+    'team:read', 'team:create', 'team:update', 'team:delete',
+    // leads
+    'leads:read', 'leads:create', 'leads:update', 'leads:delete',
+    // templates
+    'templates:read', 'templates:create', 'templates:update', 'templates:delete',
   ],
   manager: [
     'clients:create', 'clients:read', 'clients:update',
     'contracts:create', 'contracts:read', 'contracts:update',
     'documents:create', 'documents:read', 'documents:update',
-    'reports:read', 'reports:export'
+    'reports:read', 'reports:export',
+    'finance:read',
+    'quotations:read', 'quotations:create', 'quotations:update',
+    'quotations:approve', 'quotations:cancel', 'quotations:convert',
+    'events:read', 'events:create', 'events:update',
+    'team:read', 'team:create', 'team:update',
+    'leads:read', 'leads:create', 'leads:update', 'leads:delete',
+    'templates:read', 'templates:create', 'templates:update',
   ],
   operator: [
     'clients:create', 'clients:read', 'clients:update',
     'contracts:create', 'contracts:read', 'contracts:update',
-    'documents:create', 'documents:read'
+    'documents:create', 'documents:read',
+    'quotations:read', 'quotations:create', 'quotations:update',
+    'quotations:cancel',
+    'events:read', 'events:create', 'events:update',
+    'team:read',
+    'leads:read', 'leads:create', 'leads:update',
+    'templates:read',
   ],
   seller: [
     'clients:create', 'clients:read', 'clients:update',
     'contracts:create', 'contracts:read', 'contracts:update',
-    'documents:create', 'documents:read'
+    'documents:create', 'documents:read',
+    'quotations:read', 'quotations:create', 'quotations:update',
+    'quotations:approve', 'quotations:cancel', 'quotations:convert',
+    'events:read',
+    'leads:read', 'leads:create', 'leads:update',
+    'templates:read',
   ],
   viewer: [
     'clients:read',
     'contracts:read',
     'documents:read',
-    'reports:read'
-  ]
+    'reports:read',
+    'finance:read',
+    'quotations:read',
+    'events:read',
+    'team:read',
+    'leads:read',
+    'templates:read',
+  ],
 };
 
 /**
@@ -56,9 +100,16 @@ const checkPermission = (permission) => {
       // Verificar permissão específica
       if (!permissions.includes(permission)) {
         console.warn(`[Permission] Usuário role=${userRole} tentou acessar ${permission}`);
-        return res.status(403).json({ 
-          success: false, 
-          error: 'Você não tem permissão para realizar esta ação' 
+        // Audit log: acesso negado
+        logAudit(req, 'permission_denied', null, null, {
+          required: permission,
+          role: userRole,
+          path: req.path,
+          method: req.method,
+        });
+        return res.status(403).json({
+          success: false,
+          error: 'Você não tem permissão para realizar esta ação'
         });
       }
       

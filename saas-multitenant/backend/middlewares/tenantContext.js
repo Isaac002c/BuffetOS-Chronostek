@@ -1,5 +1,6 @@
 // middlewares/tenantContext.js
 const jwt = require('jsonwebtoken');
+const pool = require('../config/db');
 
 const isDev = process.env.NODE_ENV !== 'production';
 const log = (...args) => { if (isDev) console.log(...args); };
@@ -10,14 +11,14 @@ const getJWTSecret = () => {
   return secret;
 };
 
-module.exports = function tenantContext(req, res, next) {
+module.exports = async function tenantContext(req, res, next) {
   try {
     let token = null;
 
     // 1️⃣ Header Authorization
     const authHeader = req.headers['authorization'];
     log('[TENANT CONTEXT] Authorization Header:', authHeader ? 'Presente' : 'Ausente');
-    
+
     if (authHeader?.startsWith('Bearer ')) {
       token = authHeader.split(' ')[1];
       log('[TENANT CONTEXT] Token extraído do header Authorization');
@@ -42,7 +43,7 @@ module.exports = function tenantContext(req, res, next) {
       return res.status(401).json({ error: 'Token não fornecido.' });
     }
 
-    // 3️⃣ Verifica token
+    // 3️⃣ Verifica assinatura e expiração
     let decoded;
     try {
       decoded = jwt.verify(token, getJWTSecret());
@@ -62,15 +63,43 @@ module.exports = function tenantContext(req, res, next) {
       return res.status(401).json({ error: 'Tenant inválido.' });
     }
 
+    // 5️⃣ Verifica token_version e is_active no banco (revogação de sessão)
+    if (decoded.userId) {
+      try {
+        const userCheck = await pool.query(
+          'SELECT token_version, is_active FROM users WHERE id = $1 AND tenant_id = $2',
+          [decoded.userId, String(decoded.tenantId)]
+        );
+        const dbUser = userCheck.rows[0];
+
+        if (!dbUser) {
+          return res.status(401).json({ error: 'Usuário não encontrado.' });
+        }
+
+        if (dbUser.is_active === false) {
+          return res.status(403).json({ error: 'Conta desativada.' });
+        }
+
+        const tokenVersionInJWT = decoded.tokenVersion ?? 0;
+        const tokenVersionInDB  = dbUser.token_version   ?? 0;
+        if (tokenVersionInJWT < tokenVersionInDB) {
+          log('[TENANT CONTEXT] token_version inválido — sessão revogada');
+          return res.status(401).json({ error: 'Sessão encerrada. Faça login novamente.' });
+        }
+      } catch (dbErr) {
+        console.error('[tenantContext] Erro ao verificar token_version:', dbErr.message);
+        return res.status(500).json({ error: 'Erro interno no middleware.' });
+      }
+    }
+
     log('[TENANT CONTEXT] Tenant aceito:', decoded.tenantId);
 
-    // 5️⃣ Popula request
+    // 6️⃣ Popula request
     req.tenantId  = String(decoded.tenantId);
     req.userId    = decoded.userId   || null;
     req.userEmail = decoded.email    || null;
     req.userRole  = decoded.role     || 'seller';
     req.sellerId  = decoded.sellerId || null;
-
 
     log('[tenantContext] Autenticado:', {
       userId:   req.userId,

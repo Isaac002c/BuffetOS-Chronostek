@@ -15,9 +15,9 @@ const buildWhereClause = (filter, tableAlias = '') => {
     paramIndex++;
   }
   
-  // Filter by seller (for non-admin users)
+  // Filter by assigned user
   if (filter.sellerId) {
-    conditions.push(`${prefix}seller_id = $${paramIndex}`);
+    conditions.push(`${prefix}assigned_to = $${paramIndex}`);
     params.push(filter.sellerId);
     paramIndex++;
   }
@@ -33,17 +33,17 @@ const buildWhereClause = (filter, tableAlias = '') => {
 };
 
 // CREATE - Criar novo lead
-const createLead = async ({ name, email, phone, company, value, status, source, stage, tenant_id, seller_id }) => {
+const createLead = async ({ name, email, phone, company, value, status, source, stage, event_type, event_date, next_action, tenant_id }) => {
     if (!tenant_id) {
         throw new Error('tenant_id é obrigatório para criar um lead');
     }
-    
+
     const result = await pool.query(
-        `INSERT INTO leads(name, email, phone, company, value, status, source, stage, tenant_id, seller_id) 
-         VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
-        [name, email, phone, company, value || 0, status || 'novo', source, stage || 'lead', tenant_id, seller_id || null]
+        `INSERT INTO leads(name, email, phone, company, value, status, source, stage, event_type, event_date, next_action, tenant_id)
+         VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+        [name, email, phone, company, value || 0, status || 'novo', source, stage || 'lead', event_type || null, event_date || null, next_action || null, tenant_id]
     );
-    
+
     console.log('[leadModels] Lead criado com sucesso:', result.rows[0].id);
     return result.rows[0];
 };
@@ -77,12 +77,13 @@ const getLeadById = async (id, tenant_id) => {
 };
 
 // UPDATE - Atualizar lead
-const updateLead = async (id, { name, email, phone, company, value, status, source, stage, seller_id }, tenant_id) => {
+const updateLead = async (id, { name, email, phone, company, value, status, source, stage, event_type, event_date, next_action }, tenant_id) => {
     const result = await pool.query(
-        `UPDATE leads 
-         SET name = $1, email = $2, phone = $3, company = $4, value = $5, status = $6, source = $7, stage = $8, seller_id = $9, updated_at = NOW()
-         WHERE id = $10 AND tenant_id = $11 RETURNING *`,
-        [name, email, phone, company, value, status, source, stage || 'lead', seller_id, id, tenant_id]
+        `UPDATE leads
+         SET name = $1, email = $2, phone = $3, company = $4, value = $5, status = $6, source = $7, stage = $8,
+             event_type = $9, event_date = $10, next_action = $11, updated_at = NOW()
+         WHERE id = $12 AND tenant_id = $13 RETURNING *`,
+        [name, email, phone, company, value, status, source, stage || 'lead', event_type || null, event_date || null, next_action || null, id, tenant_id]
     );
     return result.rows[0];
 };

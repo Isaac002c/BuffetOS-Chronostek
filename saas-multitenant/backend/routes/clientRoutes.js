@@ -1,21 +1,23 @@
+const { safeError } = require('../utils/errorResponse');
 const express = require('express');
 const router = express.Router();
 const clientModel = require('../models/clientModels');
+const { checkPermission } = require('../middlewares/checkPermission');
 
 // GET /api/clients - Listar todos os clientes
-router.get('/', async (req, res) => {
+router.get('/', checkPermission('clients:read'), async (req, res) => {
   try {
     const tenantId = req.tenantId;
     const clients = await clientModel.getAllClients(tenantId);
     res.json({ success: true, data: clients });
   } catch (err) {
     console.error('Erro ao buscar clientes:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
 // GET /api/clients/search - Pesquisar clientes
-router.get('/search', async (req, res) => {
+router.get('/search', checkPermission('clients:read'), async (req, res) => {
   try {
     const tenantId = req.tenantId;
     const { q } = req.query;
@@ -28,24 +30,24 @@ router.get('/search', async (req, res) => {
     res.json({ success: true, data: clients });
   } catch (err) {
     console.error('Erro ao pesquisar clientes:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
 // GET /api/clients/stats - Estatísticas de clientes
-router.get('/stats', async (req, res) => {
+router.get('/stats', checkPermission('clients:read'), async (req, res) => {
   try {
     const tenantId = req.tenantId;
     const total = await clientModel.countClients(tenantId);
     res.json({ success: true, data: { total } });
   } catch (err) {
     console.error('Erro ao buscar stats:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
 // GET /api/clients/:id - Buscar cliente por ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', checkPermission('clients:read'), async (req, res) => {
   try {
     const { id } = req.params;
     const tenantId = req.tenantId;
@@ -59,12 +61,12 @@ router.get('/:id', async (req, res) => {
     res.json({ success: true, data: client });
   } catch (err) {
     console.error('Erro ao buscar cliente:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
 // POST /api/clients - Criar novo cliente
-router.post('/', async (req, res) => {
+router.post('/', checkPermission('clients:create'), async (req, res) => {
   try {
     const { name, birth_date, cpf, cnh, first_cnh, phone, email, address, notes } = req.body;
     const tenantId = req.tenantId;
@@ -97,12 +99,12 @@ router.post('/', async (req, res) => {
     res.status(201).json({ success: true, data: client });
   } catch (err) {
     console.error('Erro ao criar cliente:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
 // PUT /api/clients/:id - Atualizar cliente
-router.put('/:id', async (req, res) => {
+router.put('/:id', checkPermission('clients:update'), async (req, res) => {
   try {
     const { id } = req.params;
     const { name, birth_date, cpf, cnh, first_cnh, phone, email, address, notes } = req.body;
@@ -137,12 +139,12 @@ router.put('/:id', async (req, res) => {
     res.json({ success: true, data: client });
   } catch (err) {
     console.error('Erro ao atualizar cliente:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
 // DELETE /api/clients/:id - Deletar cliente
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', checkPermission('clients:delete'), async (req, res) => {
   try {
     const { id } = req.params;
     const tenantId = req.tenantId;
@@ -156,7 +158,7 @@ router.delete('/:id', async (req, res) => {
     res.json({ success: true, data: client, message: 'Cliente deletado com sucesso' });
   } catch (err) {
     console.error('Erro ao deletar cliente:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 

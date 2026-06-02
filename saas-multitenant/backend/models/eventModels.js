@@ -1,12 +1,14 @@
 const pool = require('../config/db');
 
 async function createEvent({ lead_id, client_name, event_type, event_date, guest_count, location, quotation_id, notes = '', status = 'confirmed', tenant_id }) {
+  const safeLeadId      = lead_id      || null;
+  const safeQuotationId = quotation_id || null;
   const result = await pool.query(
     `INSERT INTO events
       (tenant_id, lead_id, client_name, event_type, event_date, guest_count, location, quotation_id, status, notes, created_at, updated_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
       RETURNING *`,
-    [tenant_id, lead_id, client_name, event_type, event_date, guest_count, location, quotation_id, status, notes]
+    [tenant_id, safeLeadId, client_name, event_type, event_date, guest_count, location, safeQuotationId, status, notes]
   );
 
   return result.rows[0];
@@ -57,6 +59,10 @@ async function updateEvent(eventId, data, tenant_id) {
   const fields = [];
   const values = [];
   let paramCount = 1;
+
+  // Sanitize UUID fields — empty string crashes PostgreSQL UUID cast
+  if (data.lead_id      === '') data.lead_id      = null;
+  if (data.quotation_id === '') data.quotation_id = null;
 
   const allowedFields = ['lead_id', 'client_name', 'event_type', 'event_date', 'guest_count', 'location', 'quotation_id', 'status', 'notes'];
   for (const field of allowedFields) {

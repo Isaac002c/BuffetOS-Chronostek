@@ -9,8 +9,8 @@ async function getDashboardStats(tenant_id, month = null, year = null) {
     `SELECT
       (SELECT COALESCE(SUM(total_amount), 0) FROM quotations WHERE tenant_id = $1 AND status = 'approved' AND EXTRACT(MONTH FROM created_at) = $2 AND EXTRACT(YEAR FROM created_at) = $3) as total_revenue_month,
       (SELECT COALESCE(SUM(total_amount), 0) FROM quotations WHERE tenant_id = $1 AND status = 'approved') as total_revenue_all,
-      (SELECT COUNT(*) FROM quotations WHERE tenant_id = $1 AND status IN ('draft', 'pending')) as open_quotes_count,
-      (SELECT COALESCE(SUM(total_amount), 0) FROM quotations WHERE tenant_id = $1 AND status IN ('draft', 'pending')) as pipeline_value,
+      (SELECT COUNT(*) FROM quotations WHERE tenant_id = $1 AND status IN ('draft', 'pending', 'active')) as open_quotes_count,
+      (SELECT COALESCE(SUM(total_amount), 0) FROM quotations WHERE tenant_id = $1 AND status IN ('draft', 'pending', 'active')) as pipeline_value,
       (SELECT COUNT(*) FROM quotations WHERE tenant_id = $1 AND status = 'approved' AND EXTRACT(MONTH FROM created_at) = $2 AND EXTRACT(YEAR FROM created_at) = $3) as approved_quotes_month,
       (SELECT COUNT(*) FROM quotations WHERE tenant_id = $1 AND status = 'approved') as approved_quotes_all,
       (SELECT COUNT(*) FROM events WHERE tenant_id = $1 AND status = 'confirmed' AND EXTRACT(MONTH FROM event_date) = $2 AND EXTRACT(YEAR FROM event_date) = $3) as confirmed_events_month,
@@ -48,7 +48,7 @@ async function getLeadPipelineValue(tenant_id) {
       ROUND(COALESCE(AVG(total_amount), 0), 2) as avg_open_quote_value
      FROM quotations
      WHERE tenant_id = $1
-       AND status IN ('draft', 'pending')`,
+       AND status IN ('draft', 'pending', 'active')`,
     [tenant_id]
   );
 
@@ -56,6 +56,8 @@ async function getLeadPipelineValue(tenant_id) {
 }
 
 async function getEventTypeBreakdown(tenant_id) {
+  // Inclui todos os eventos confirmed do ano corrente (passados e futuros)
+  // Antes filtrava só >= mês atual, o que deixava o gráfico vazio para eventos passados
   const result = await pool.query(
     `SELECT
       event_type,
@@ -65,7 +67,7 @@ async function getEventTypeBreakdown(tenant_id) {
      FROM events
      WHERE tenant_id = $1
        AND status = 'confirmed'
-       AND event_date >= DATE_TRUNC('month', NOW())
+       AND EXTRACT(YEAR FROM event_date) = EXTRACT(YEAR FROM NOW())
      GROUP BY event_type
      ORDER BY count DESC`,
     [tenant_id]

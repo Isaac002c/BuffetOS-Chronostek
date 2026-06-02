@@ -8,9 +8,9 @@ yarn.lock
 # Testing
 /coverage
 
-# Next.js
-/.next/
-/out/
+# Next.js build output (wherever estiver)
+**/.next/
+**/out/
 /build
 /dist
 

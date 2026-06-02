@@ -1,3 +1,4 @@
+const { safeError } = require('../utils/errorResponse');
 // routes/templatesRoutes.js
 // Rotas para gerenciamento de templates de eventos e simulação de orçamentos
 
@@ -6,24 +7,25 @@ const router = express.Router();
 const templateModels = require('../models/templateModels');
 const calculationService = require('../services/calculationService');
 const pdfService = require('../services/pdfService');
+const { checkPermission } = require('../middlewares/checkPermission');
 
 // ============================================
 // EVENT TEMPLATES - CRUD
 // ============================================
 
 // GET /api/event-templates
-router.get('/', async (req, res) => {
+router.get('/', checkPermission('templates:read'), async (req, res) => {
   try {
     const templates = await templateModels.getAllEventTemplates(req.tenantId);
     res.json({ success: true, data: templates });
   } catch (err) {
     console.error('Erro ao buscar templates:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
 // POST /api/event-templates
-router.post('/', async (req, res) => {
+router.post('/', checkPermission('templates:create'), async (req, res) => {
   try {
     const { name, description, event_type } = req.body;
 
@@ -41,12 +43,12 @@ router.post('/', async (req, res) => {
     res.status(201).json({ success: true, data: template });
   } catch (err) {
     console.error('Erro ao criar template:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
 // GET /api/event-templates/:id
-router.get('/:id', async (req, res) => {
+router.get('/:id', checkPermission('templates:read'), async (req, res) => {
   try {
     const template = await templateModels.getTemplateWithItems(req.params.id, req.tenantId);
     if (!template) {
@@ -55,12 +57,12 @@ router.get('/:id', async (req, res) => {
     res.json({ success: true, data: template });
   } catch (err) {
     console.error('Erro ao buscar template:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
 // PUT /api/event-templates/:id
-router.put('/:id', async (req, res) => {
+router.put('/:id', checkPermission('templates:update'), async (req, res) => {
   try {
     const { name, description, event_type } = req.body;
 
@@ -77,12 +79,12 @@ router.put('/:id', async (req, res) => {
     res.json({ success: true, data: template });
   } catch (err) {
     console.error('Erro ao atualizar template:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
 // DELETE /api/event-templates/:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', checkPermission('templates:delete'), async (req, res) => {
   try {
     const deleted = await templateModels.deleteEventTemplate(req.params.id, req.tenantId);
     if (!deleted) {
@@ -91,7 +93,7 @@ router.delete('/:id', async (req, res) => {
     res.json({ success: true, message: 'Template deletado com sucesso' });
   } catch (err) {
     console.error('Erro ao deletar template:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -100,7 +102,7 @@ router.delete('/:id', async (req, res) => {
 // ============================================
 
 // POST /api/event-templates/:id/items
-router.post('/:id/items', async (req, res) => {
+router.post('/:id/items', checkPermission('templates:update'), async (req, res) => {
   try {
     const { name, unit, quantity_per_person, cost_per_unit } = req.body;
 
@@ -129,12 +131,12 @@ router.post('/:id/items', async (req, res) => {
     res.status(201).json({ success: true, data: item });
   } catch (err) {
     console.error('Erro ao criar item do template:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
 // PUT /api/template-items/:id
-router.put('/items/:id', async (req, res) => {
+router.put('/items/:id', checkPermission('templates:update'), async (req, res) => {
   try {
     const { name, unit, quantity_per_person, cost_per_unit } = req.body;
 
@@ -151,12 +153,12 @@ router.put('/items/:id', async (req, res) => {
     res.json({ success: true, data: item });
   } catch (err) {
     console.error('Erro ao atualizar item:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
 // DELETE /api/template-items/:id
-router.delete('/items/:id', async (req, res) => {
+router.delete('/items/:id', checkPermission('templates:delete'), async (req, res) => {
   try {
     const deleted = await templateModels.deleteTemplateItem(req.params.id, req.tenantId);
     if (!deleted) {
@@ -165,7 +167,7 @@ router.delete('/items/:id', async (req, res) => {
     res.json({ success: true, message: 'Item deletado com sucesso' });
   } catch (err) {
     console.error('Erro ao deletar item:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 

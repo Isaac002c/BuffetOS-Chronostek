@@ -52,22 +52,17 @@ const icons = {
       <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
     </svg>
   ),
-  clients: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
-    </svg>
-  ),
 };
 
 // ─── NAV ITEMS ────────────────────────────────────────────────────────────────
 
 const navItems = [
   { key: 'dashboard',   label: 'Dashboard',  href: '/dashboard?module=buffet&tab=dashboard',   icon: 'dashboard' },
-  { key: 'events',      label: 'Eventos',    href: '/dashboard?module=buffet&tab=events',       icon: 'events' },
-  { key: 'quotations',  label: 'Orçamentos', href: '/dashboard?module=buffet&tab=quotations',   icon: 'quotations' },
-  { key: 'billing',     label: 'Financeiro', href: '/dashboard?module=buffet&tab=billing',      icon: 'billing' },
-  { key: 'team',        label: 'Equipe',     href: '/dashboard?module=buffet&tab=team',         icon: 'team' },
+  { key: 'leads',       label: 'Leads',      href: '/dashboard?module=buffet&tab=leads',        icon: 'leads' },
+  { key: 'events',      label: 'Calendário', href: '/dashboard?module=buffet&tab=events',       icon: 'events' },
+  { key: 'quotations', label: 'Orçamentos', href: '/dashboard?module=buffet&tab=quotations', icon: 'quotations' },
+  { key: 'billing',    label: 'Financeiro', href: '/dashboard?module=buffet&tab=billing',    icon: 'billing'    },
+  { key: 'team',       label: 'Equipe',     href: '/dashboard?module=buffet&tab=team',       icon: 'team'       },
 ];
 
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
@@ -81,7 +76,33 @@ export default function Sidebar({ activeTab, collapsed, mobileOpen, onToggleColl
       >
         {/* Brand */}
         <div className="sidebar-brand">
-          <div className="brand-mark">CT</div>
+          <div className="brand-mark" style={{ background: 'none', padding: 0, flexShrink: 0 }}>
+            <img
+              src="/logo.png"
+              alt="ChronosTek"
+              width={44}
+              height={44}
+              style={{
+                objectFit: 'contain',
+                borderRadius: 12,
+                display: 'block',
+                boxShadow: '0 0 14px rgba(96,165,250,0.45), 0 0 4px rgba(96,165,250,0.2)',
+                border: '1px solid rgba(96,165,250,0.25)',
+              }}
+              onError={e => {
+                e.currentTarget.style.display = 'none';
+                e.currentTarget.nextSibling.style.display = 'flex';
+              }}
+            />
+            <span style={{
+              display: 'none', width: 44, height: 44, borderRadius: 12,
+              background: 'linear-gradient(135deg, #1d4ed8, #2563eb)',
+              color: '#fff', fontWeight: 800, fontSize: 15,
+              alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 0 14px rgba(96,165,250,0.45)',
+              letterSpacing: 0.5,
+            }}>CT</span>
+          </div>
           {!collapsed && (
             <div className="brand-info">
               <strong>ChronosTek</strong>
@@ -120,8 +141,8 @@ export default function Sidebar({ activeTab, collapsed, mobileOpen, onToggleColl
         {/* Footer */}
         <div className="sidebar-footer">
           {!collapsed && <p className="sidebar-footer-title">Suporte</p>}
-          <a href="mailto:suporte@chronostek.com.br" className="sidebar-footer-link">
-            {collapsed ? '✉' : 'suporte@chronostek.com.br'}
+          <a href="mailto:contato@chronostek.com.br" className="sidebar-footer-link">
+            {collapsed ? '✉' : 'contato@chronostek.com.br'}
           </a>
           <button
             type="button"

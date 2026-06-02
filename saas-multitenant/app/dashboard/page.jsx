@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import ModuleLayout from '../components/ModuleLayout';
-import QuickActionsMenu from '../components/QuickActionsMenu';
 import { apiRequest } from '../lib/api';
 
 import BuffetQuotations from '../buffet/Quotations';
@@ -14,15 +13,13 @@ import BuffetBilling    from '../buffet/Billing';
 import BuffetLeads      from '../buffet/Leads';
 import BuffetTeam       from '../buffet/Team';
 import BuffetDashboard  from '../buffet/Dashboard';
-import QuotationSimulator from '../buffet/QuotationSimulator';
 
 const modulePages = {
   buffet: {
     name: 'Buffet',
     pages: {
-      dashboard: BuffetDashboard,
+      dashboard:  BuffetDashboard,
       quotations: BuffetQuotations,
-      simulator: QuotationSimulator,
       events:     BuffetEvents,
       leads:      BuffetLeads,
       billing:    BuffetBilling,
@@ -34,19 +31,15 @@ const modulePages = {
 const pageInfo = {
   dashboard: {
     title: 'Dashboard',
-    subtitle: 'VisÃ£o geral das mÃ©tricas importantes do seu negÃ³cio.',
+    subtitle: 'Visão geral das métricas importantes do seu negócio.',
   },
   quotations: {
-    title: 'OrÃ§amentos',
-    subtitle: 'Controle rÃ¡pido e preciso das suas propostas e pipeline de vendas.',
-  },
-  simulator: {
-    title: 'Simulador',
-    subtitle: 'Crie propostas Ã¡geis com visual moderno e dados claros.',
+    title: 'Orçamentos',
+    subtitle: 'Controle rápido e preciso das suas propostas e pipeline de vendas.',
   },
   events: {
-    title: 'Eventos',
-    subtitle: 'Agenda limpa com foco em visualizaÃ§Ã£o e criaÃ§Ã£o de eventos.',
+    title: 'Calendário',
+    subtitle: 'Agenda limpa com foco em visualização e criação de eventos.',
   },
   leads: {
     title: 'Leads',
@@ -54,11 +47,11 @@ const pageInfo = {
   },
   billing: {
     title: 'Financeiro',
-    subtitle: 'Visualize receitas, lanÃ§amentos e tendÃªncias de faturamento.',
+    subtitle: 'Visualize receitas, lançamentos e tendências de faturamento.',
   },
   team: {
     title: 'Equipe',
-    subtitle: 'Gerencie os membros da sua equipe e suas informaÃ§Ãµes.',
+    subtitle: 'Gerencie os membros da sua equipe e suas informações.',
   },
 };
 
@@ -100,7 +93,7 @@ function DashboardContent() {
   const urlTab = searchParams.get('tab') || getDefaultTab();
 
   useEffect(() => {
-    // Verifica token no localStorage (mais confiÃ¡vel que checar string no cookie)
+    // Verifica token no localStorage (mais confiável que checar string no cookie)
     const token      = localStorage.getItem('token') || localStorage.getItem('auth-token');
     const userData   = localStorage.getItem('user');
     const tenantData = localStorage.getItem('tenant');
@@ -114,7 +107,7 @@ function DashboardContent() {
       setUser(JSON.parse(userData));
       setTenant(JSON.parse(tenantData || '{}'));
     } catch (e) {
-      console.error('[Dashboard] Erro ao parsear dados do usuÃ¡rio:', e);
+      console.error('[Dashboard] Erro ao parsear dados do usuário:', e);
       router.push('/login');
       return;
     }
@@ -124,33 +117,12 @@ function DashboardContent() {
 
   useEffect(() => {
     setActiveTab(urlTab);
+    // No mobile, fecha o drawer ao navegar (UX)
+    setMobileMenuOpen(false);
   }, [urlTab]);
 
-  const loadBadgeCounts = async () => {
-    try {
-      const quotesRes = await apiRequest('/api/quotations?status=draft').catch(() => null);
-      const leadsRes  = await apiRequest('/api/leads/inactive').catch(() => null);
-      const eventsRes = await apiRequest('/api/events?status=pending').catch(() => null);
-
-      const quotes        = quotesRes?.data || quotesRes || [];
-      const inactiveLeads = leadsRes?.data  || leadsRes  || [];
-      const events        = eventsRes?.data || eventsRes || [];
-
-      setBadges({
-        quotations: Array.isArray(quotes)        ? quotes.length        : 0,
-        leads:      Array.isArray(inactiveLeads) ? inactiveLeads.length : 0,
-        events:     Array.isArray(events)        ? events.length        : 0,
-      });
-    } catch (err) {
-      console.error('Erro ao carregar contadores:', err);
-    }
-  };
-
-  useEffect(() => {
-    loadBadgeCounts();
-    const interval = setInterval(loadBadgeCounts, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  // Badges desativados — sem contador no menu de Orçamentos
+  // Para reativar, descomentar e reimplementar loadBadgeCounts
 
   const handleLogout = async () => {
     try {
@@ -184,11 +156,7 @@ function DashboardContent() {
     </div>
   );
 
-  const pageMeta = pageInfo[activeTab] || { title: 'Painel', subtitle: 'VisÃ£o geral do sistema.' };
-  const breadcrumbs = [
-    { label: 'Dashboard', href: '/dashboard?module=buffet&tab=quotations' },
-    { label: pageMeta.title, href: `/dashboard?module=${currentModule}&tab=${activeTab}` },
-  ];
+  const pageMeta = pageInfo[activeTab] || { title: 'Painel', subtitle: 'Visão geral do sistema.' };
 
   return (
     <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
@@ -208,8 +176,6 @@ function DashboardContent() {
           onLogout={handleLogout}
           pageTitle={pageMeta.title}
           pageSubtitle={pageMeta.subtitle}
-          currentTab={activeTab}
-          breadcrumbs={breadcrumbs}
           onToggleSidebar={() => setMobileMenuOpen((prev) => !prev)}
         />
 
@@ -220,7 +186,6 @@ function DashboardContent() {
         </main>
       </div>
 
-      <QuickActionsMenu activeTab={activeTab} onNavigate={handleTabChange} />
     </div>
   );
 }

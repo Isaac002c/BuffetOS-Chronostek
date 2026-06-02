@@ -1,0 +1,24 @@
+name: Deploy Backend to VPS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'saas-multitenant/backend/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          script: |
+            cd /var/www/buffetos/saas-multitenant/backend
+            git pull origin main
+            npm install --production
+            pm2 restart buffetos-backend
+            echo "Deploy backend concluido"

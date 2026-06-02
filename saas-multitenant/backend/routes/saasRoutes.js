@@ -1,3 +1,4 @@
+const { safeError } = require('../utils/errorResponse');
 const express = require('express');
 const router = express.Router();
 const saasModel = require('../models/saasModels');
@@ -14,7 +15,7 @@ router.get('/plans', async (req, res) => {
     res.json({ success: true, data: plans });
   } catch (err) {
     console.error('Erro ao buscar planos:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -52,7 +53,7 @@ router.get('/subscription', async (req, res) => {
     res.json({ success: true, data: subscription });
   } catch (err) {
     console.error('Erro ao buscar assinatura:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -67,7 +68,7 @@ router.get('/subscription/limits/:resource', async (req, res) => {
     res.json({ success: true, data: limits });
   } catch (err) {
     console.error('Erro ao verificar limites:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -88,7 +89,7 @@ router.get('/activity', async (req, res) => {
     res.json({ success: true, data: result });
   } catch (err) {
     console.error('Erro ao buscar atividades:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -102,7 +103,7 @@ router.get('/activity/stats', async (req, res) => {
     res.json({ success: true, data: stats });
   } catch (err) {
     console.error('Erro ao buscar estatísticas:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -116,7 +117,7 @@ router.get('/activity/entity/:type/:id', async (req, res) => {
     res.json({ success: true, data: logs });
   } catch (err) {
     console.error('Erro ao buscar logs da entidade:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -124,22 +125,23 @@ router.get('/activity/entity/:type/:id', async (req, res) => {
 // ROTAS DE ADMIN (apenas para usuários admin)
 // ============================================
 
-// Middleware para verificar se é admin
+// Middleware para verificar se é admin — filtra por tenant para evitar
+// que um admin de outro tenant acesse o painel administrativo global.
 const requireAdmin = async (req, res, next) => {
   try {
     const userResult = await pool.query(
-      'SELECT role FROM users WHERE id = $1',
-      [req.userId]
+      'SELECT role FROM users WHERE id = $1 AND tenant_id = $2',
+      [req.userId, req.tenantId]
     );
-    
+
     if (!userResult.rows[0] || userResult.rows[0].role !== 'admin') {
       return res.status(403).json({ success: false, error: 'Acesso restrito a administradores' });
     }
-    
+
     next();
   } catch (err) {
     console.error('Erro ao verificar permissões:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Erro interno' });
   }
 };
 
@@ -180,7 +182,7 @@ router.get('/admin/tenants', requireAdmin, async (req, res) => {
     });
   } catch (err) {
     console.error('Erro ao listar tenants:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -191,7 +193,7 @@ router.get('/admin/tenants/:id', requireAdmin, async (req, res) => {
     
     // Buscar tenant
     const tenantResult = await pool.query(
-      'SELECT * FROM tenants WHERE id = $1',
+      'SELECT id, name, email, phone, cnpj, address, is_active, created_at FROM tenants WHERE id = $1',
       [id]
     );
     
@@ -232,7 +234,7 @@ router.get('/admin/tenants/:id', requireAdmin, async (req, res) => {
     });
   } catch (err) {
     console.error('Erro ao buscar tenant:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -283,7 +285,7 @@ router.post('/admin/tenants', requireAdmin, async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Erro ao criar tenant:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   } finally {
     client.release();
   }
@@ -307,7 +309,7 @@ router.patch('/admin/tenants/:id/status', requireAdmin, async (req, res) => {
     res.json({ success: true, data: result.rows[0] });
   } catch (err) {
     console.error('Erro ao atualizar status:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 

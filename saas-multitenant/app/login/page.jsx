@@ -22,14 +22,8 @@ export default function Login() {
         body: { email, password },
       });
 
-      // Armazenar token em cookie HTTP-only (backend envia cookie)
-      // Salva no localStorage para uso nas chamadas API
-      if (data.token) {
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('auth-token', data.token);
-        document.cookie = `auth-token=${data.token}; path=/; max-age=${30 * 24 * 60 * 60}; SameSite=Lax`;
-        console.log('[Login] Token saved:', data.token.substring(0, 20) + '...');
-      }
+      // O token JWT fica apenas no cookie httpOnly enviado pelo backend.
+      // Salvamos apenas dados de exibição (sem credencial) no localStorage.
 
       // Salvar dados do usuário
       const userData = {
@@ -40,8 +34,6 @@ export default function Login() {
       localStorage.setItem('tenant', JSON.stringify(data.tenant));
       
       localStorage.setItem('tenantId', data.tenant?.id || '');
-
-      console.log('[Login] Sucesso!');
 
       router.push('/dashboard');
     } catch (err) {

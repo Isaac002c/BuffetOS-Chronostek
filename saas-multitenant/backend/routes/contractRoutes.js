@@ -1,3 +1,4 @@
+const { safeError } = require('../utils/errorResponse');
 const express = require('express');
 const router = express.Router();
 const contractModel = require('../models/contractModels');
@@ -8,7 +9,7 @@ router.get('/aprs-stats', checkPermission('contracts:read'), async (req, res) =>
     const stats = await contractModel.getAPRsByStage(req.tenantId);
     res.json({ success: true, data: stats });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -17,7 +18,7 @@ router.get('/by-organ', checkPermission('contracts:read'), async (req, res) => {
     const data = await contractModel.getContractsGroupedByOrgan(req.tenantId);
     res.json({ success: true, data });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -29,7 +30,7 @@ router.get('/dashboard', checkPermission('contracts:read'), async (req, res) => 
     ]);
     res.json({ success: true, data: { dashboard, alerts } });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -38,7 +39,7 @@ router.get('/client/:clientId', checkPermission('contracts:read'), async (req, r
     const contracts = await contractModel.getContractsByClient(req.params.clientId, req.tenantId);
     res.json({ success: true, data: contracts });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -51,7 +52,7 @@ router.get('/service/:serviceId', checkPermission('contracts:read'), async (req,
     );
     res.json({ success: true, data: contracts });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -60,7 +61,7 @@ router.get('/', checkPermission('contracts:read'), async (req, res) => {
     const contracts = await contractModel.getAllContracts(req.tenantId);
     res.json({ success: true, data: contracts });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -69,7 +70,7 @@ router.post('/', checkPermission('contracts:create'), async (req, res) => {
     const contract = await contractModel.createContract({ ...req.body, tenant_id: req.tenantId });
     res.status(201).json({ success: true, data: contract });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -79,7 +80,7 @@ router.put('/:id', checkPermission('contracts:update'), async (req, res) => {
     if (!contract) return res.status(404).json({ success: false, error: 'Not found' });
     res.json({ success: true, data: contract });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -89,7 +90,7 @@ router.delete('/:id', checkPermission('contracts:delete'), async (req, res) => {
     if (!contract) return res.status(404).json({ success: false, error: 'Not found' });
     res.json({ success: true, data: contract });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -99,7 +100,7 @@ router.get('/:id', checkPermission('contracts:read'), async (req, res) => {
     if (!contract) return res.status(404).json({ success: false, error: 'Not found' });
     res.json({ success: true, data: contract });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 

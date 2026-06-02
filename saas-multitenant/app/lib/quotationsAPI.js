@@ -52,10 +52,15 @@ export const cancelQuotation = async (id) => {
   return data.data;
 };
 
-export const duplicateQuotation = async (id, clientId) => {
+export const duplicateQuotation = async (id, clientId, leadId) => {
   const data = await apiRequest(`/api/quotations/${id}/duplicate`, {
     method: 'POST',
-    body: { clientId },
+    body: { clientId: clientId || null, leadId: leadId || null },
   });
   return data.data;
+};
+
+export const getTenantProfile = async () => {
+  const data = await apiRequest('/api/tenant');
+  return data.tenant || {};
 };

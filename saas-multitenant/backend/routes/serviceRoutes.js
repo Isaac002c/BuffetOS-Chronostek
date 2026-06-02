@@ -1,3 +1,4 @@
+const { safeError } = require('../utils/errorResponse');
 const express = require('express');
 const router = express.Router();
 const serviceModel = require('../models/serviceModels');
@@ -8,7 +9,7 @@ router.get('/', async (req, res) => {
     const services = await serviceModel.getAllServices(req.tenantId);
     res.json({ success: true, data: services });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -18,7 +19,7 @@ router.get('/client/:clientId', async (req, res) => {
     const services = await serviceModel.getServicesByClient(req.params.clientId, req.tenantId);
     res.json({ success: true, data: services });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -31,7 +32,7 @@ router.post('/', async (req, res) => {
     const service = await serviceModel.createService({ tenant_id: req.tenantId, client_id, name });
     res.status(201).json({ success: true, data: service });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
@@ -43,7 +44,7 @@ router.delete('/:id', async (req, res) => {
     await serviceModel.deleteService(req.params.id, req.tenantId, client_id);
     res.json({ success: true, message: 'Serviço deletado com sucesso' });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: safeError(err) });
   }
 });
 
