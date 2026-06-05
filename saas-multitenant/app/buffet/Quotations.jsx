@@ -1881,7 +1881,7 @@ function QuotationBuilder({
 function QuotationCard({ quotation, getClientName, onEdit, onDuplicate, onApprove, onCancel, onDelete, onConvertToEvent, onExportPDF }) {
   const [hovered, setHovered] = useState(false);
   const eventDate = quotation.event_date
-    ? new Date(quotation.event_date + 'T00:00').toLocaleDateString('pt-BR')
+    ? new Date(quotation.event_date + (quotation.event_date.includes('T') ? '' : 'T00:00')).toLocaleDateString('pt-BR')
     : '—';
 
   return (

@@ -8,6 +8,17 @@ const BACKEND_URL = process.env.BACKEND_URL || 'http://127.0.0.1:5000';
 const nextConfig = {
   reactStrictMode: true,
 
+  async redirects() {
+    return [
+      // Evita 404 de browsers que pedem /favicon.ico diretamente
+      {
+        source: '/favicon.ico',
+        destination: '/icon.svg',
+        permanent: false,
+      },
+    ];
+  },
+
   async rewrites() {
     return [
       {
