@@ -127,17 +127,36 @@ router.post('/login',
       }
 
       // Token expira em 8 h (jornada de trabalho).
-      // Tokens roubados ou de ex-funcionários ficam válidos no máximo até o fim do dia.
-      const TOKEN_TTL_SEC = 8 * 60 * 60; // 8 horas em segundos
+      const TOKEN_TTL_SEC = 8 * 60 * 60;
+
+      // Sessões simultâneas: máximo 2 dispositivos por usuário.
+      // Se já há 2, remove a sessão mais antiga antes de criar a nova.
+      const MAX_SESSIONS = 2;
+      const sessionCountResult = await client.query(
+        'SELECT COUNT(*) FROM user_sessions WHERE user_id = $1',
+        [user.id]
+      );
+      if (parseInt(sessionCountResult.rows[0].count) >= MAX_SESSIONS) {
+        await client.query(
+          `DELETE FROM user_sessions
+           WHERE id = (SELECT id FROM user_sessions WHERE user_id = $1 ORDER BY created_at ASC LIMIT 1)`,
+          [user.id]
+        );
+      }
+      const sessionResult = await client.query(
+        'INSERT INTO user_sessions (user_id, tenant_id) VALUES ($1, $2) RETURNING id',
+        [user.id, user.tenant_id]
+      );
+      const sessionId = sessionResult.rows[0].id;
 
       const token = jwt.sign(
         {
-          userId: user.id,
-          tenantId: user.tenant_id,
-          email: user.email,
-          role: user.role || 'admin',
-          // token_version: permite invalidar TODOS os tokens emitidos antes de uma troca de senha ou logout forçado
+          userId:       user.id,
+          tenantId:     user.tenant_id,
+          email:        user.email,
+          role:         user.role || 'admin',
           tokenVersion: user.token_version ?? 0,
+          sessionId,
         },
         getJWTSecret(),
         { expiresIn: TOKEN_TTL_SEC }
@@ -208,9 +227,8 @@ router.post('/validate', async (req, res) => {
   }
 });
 
-// 4. LOGOUT — invalida o token via token_version (mesmo que o cookie seja clonado)
+// 4. LOGOUT — remove apenas a sessão deste dispositivo (os outros continuam ativos)
 router.post('/logout', async (req, res) => {
-  // Tenta invalidar token_version se o usuário estiver autenticado
   try {
     const token =
       req.cookies?.token ||
@@ -219,11 +237,9 @@ router.post('/logout', async (req, res) => {
 
     if (token) {
       const decoded = jwt.verify(token, getJWTSecret());
-      if (decoded?.userId) {
-        await pool.query(
-          'UPDATE users SET token_version = token_version + 1 WHERE id = $1',
-          [decoded.userId]
-        );
+      // Remove só a sessão deste dispositivo
+      if (decoded?.sessionId) {
+        await pool.query('DELETE FROM user_sessions WHERE id = $1', [decoded.sessionId]);
       }
     }
   } catch (_) {

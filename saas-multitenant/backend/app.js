@@ -328,6 +328,22 @@ if (process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL && !proce
     console.warn(' Migration warning (audit_logs):', err.message);
   }
 
+  // FASE 11: sessões por dispositivo (max 2 simultâneas)
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id    UUID        NOT NULL,
+        tenant_id  UUID        NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions (user_id, created_at DESC)`);
+    console.log(' Migration: user_sessions garantida');
+  } catch (err) {
+    console.warn(' Migration warning (user_sessions):', err.message);
+  }
+
   app.listen(PORT, () => {
     console.log(` CRM rodando na porta ${PORT}`);
   });

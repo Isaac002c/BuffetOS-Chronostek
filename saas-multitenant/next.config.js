@@ -13,7 +13,7 @@ const nextConfig = {
       // Evita 404 de browsers que pedem /favicon.ico diretamente
       {
         source: '/favicon.ico',
-        destination: '/icon.svg',
+        destination: '/icon.png',
         permanent: false,
       },
     ];

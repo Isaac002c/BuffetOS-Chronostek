@@ -86,6 +86,18 @@ module.exports = async function tenantContext(req, res, next) {
           log('[TENANT CONTEXT] token_version inválido — sessão revogada');
           return res.status(401).json({ error: 'Sessão encerrada. Faça login novamente.' });
         }
+
+        // Verifica se a sessão deste dispositivo ainda está ativa
+        if (decoded.sessionId) {
+          const sessionCheck = await pool.query(
+            'SELECT id FROM user_sessions WHERE id = $1 AND user_id = $2',
+            [decoded.sessionId, decoded.userId]
+          );
+          if (!sessionCheck.rows[0]) {
+            log('[TENANT CONTEXT] sessionId não encontrado — sessão encerrada');
+            return res.status(401).json({ error: 'Sessão encerrada. Faça login novamente.' });
+          }
+        }
       } catch (dbErr) {
         console.error('[tenantContext] Erro ao verificar token_version:', dbErr.message);
         return res.status(500).json({ error: 'Erro interno no middleware.' });
