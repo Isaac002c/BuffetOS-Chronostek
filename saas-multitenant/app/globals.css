@@ -7434,3 +7434,85 @@ img, svg { max-width: 100%; }
     grid-template-columns: 1fr !important;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   QUOTATIONS — Responsividade Mobile
+   ══════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  /* Cards: 1 coluna (melhor UX que carousel para cards com botões) */
+  .quotations-cards-grid {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    overflow-x: unset !important;
+    scroll-snap-type: unset !important;
+    padding-bottom: 0 !important;
+    gap: 12px !important;
+  }
+  .quotations-cards-grid > * {
+    min-width: unset !important;
+    max-width: unset !important;
+    flex-shrink: unset !important;
+    scroll-snap-align: unset !important;
+  }
+
+  /* Builder: sidebar desce abaixo do form */
+  .builder-layout {
+    flex-direction: column !important;
+    padding: 12px !important;
+    gap: 16px !important;
+  }
+  .builder-sidebar {
+    width: 100% !important;
+  }
+  .builder-sidebar > div {
+    position: static !important;
+  }
+
+  /* Hero metrics: 3 colunas em vez de 6 */
+  .hero-metrics-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  /* Grids 2-col do form: colapsa para 1 col */
+  .qs-form-row {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* Itens do orçamento: scroll horizontal para preservar colunas */
+  .qs-items-section {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    margin: 0 -8px !important;
+    padding: 0 8px !important;
+  }
+  .qs-items-header,
+  .qs-item-row {
+    min-width: 460px !important;
+  }
+
+  /* Botões da header do builder: quebra linha se necessário */
+  .qs-header-actions {
+    gap: 4px !important;
+    flex-wrap: wrap !important;
+    justify-content: flex-end !important;
+  }
+  .qs-header-actions > button {
+    font-size: 11px !important;
+    padding: 5px 8px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Hero metrics: 2 colunas em telas muito pequenas */
+  .hero-metrics-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Builder header: compacta padding */
+  .builder-layout {
+    padding: 8px !important;
+  }
+}

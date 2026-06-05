@@ -1395,7 +1395,7 @@ function ItemRow({ item, idx, onChange, onRemove }) {
   const subtotal = Number(item.quantity || 0) * Number(item.unit_price || 0);
 
   return (
-    <div style={{
+    <div className="qs-item-row" style={{
       display: 'grid',
       gridTemplateColumns: '1fr 90px 140px 110px 36px',
       gap: 8,
@@ -1643,7 +1643,7 @@ function QuotationBuilder({
           </div>
 
           {/* Right */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <div className="qs-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <button onClick={onChangeTemplate} style={{
               padding: '7px 14px', borderRadius: 10, border: '1px solid #e2e8f0',
               background: '#f8fafc', color: '#64748b', fontSize: 12, fontWeight: 600, cursor: 'pointer',
@@ -1728,7 +1728,7 @@ function QuotationBuilder({
                 </select>
               </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div className="qs-form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <div>
                 <label style={S.label}>Tipo de Evento *</label>
                 <input
@@ -1784,7 +1784,8 @@ function QuotationBuilder({
             }
           >
             {/* Column headers */}
-            <div style={{
+            <div className="qs-items-section">
+            <div className="qs-items-header" style={{
               display: 'grid',
               gridTemplateColumns: '1fr 90px 140px 110px 36px',
               gap: 8, padding: '0 8px 8px',
@@ -1797,11 +1798,12 @@ function QuotationBuilder({
               ))}
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <div className="qs-items-rows" style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               {items.map((item, idx) => (
                 <ItemRow key={idx} item={item} idx={idx} onChange={onItemChange} onRemove={onRemoveItem} />
               ))}
             </div>
+            </div>{/* fim qs-items-section */}
 
             <button onClick={onAddItem} style={{
               display: 'flex', alignItems: 'center', gap: 8,
@@ -1818,7 +1820,7 @@ function QuotationBuilder({
 
           {/* Financeiro */}
           <BuilderSection title="Configurações Financeiras" icon="💳">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div className="qs-form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <div>
                 <label style={S.label}>Desconto (%)</label>
                 <input
