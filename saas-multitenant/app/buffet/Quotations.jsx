@@ -2304,14 +2304,16 @@ export default function BuffetQuotations() {
     getTenantProfile()
       .then(t => { if (t?.name) setTenantInfo(t); })
       .catch(() => {});
-    // Carrega fichas técnicas para o seletor nos itens do orçamento
-    getAllSheets().then(setSheets).catch(() => {});
   }, []);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [qData, cData, lData] = await Promise.all([getAllQuotations(), getClients(), getLeads().catch(() => [])]);
+      const [qData, cData, lData] = await Promise.all([
+        getAllQuotations(),
+        getClients(),
+        getLeads().catch(() => []),
+      ]);
       setQuotations(qData || []);
       setClients(cData || []);
       setLeads(lData || []);
@@ -2320,6 +2322,9 @@ export default function BuffetQuotations() {
     } finally {
       setLoading(false);
     }
+    // Sempre recarrega fichas técnicas junto — garante que fichas novas apareçam
+    // mesmo sem remontar o componente (CachedTabs mantém em memória entre abas)
+    getAllSheets().then(setSheets).catch(() => {});
   };
 
   const showMsg = (type, text) => setMessage({ type, text });
@@ -2471,6 +2476,9 @@ export default function BuffetQuotations() {
     setFixedCosts([]);
     setVariableCosts([]);
     setActivePdfTemplate(null);
+    // Recarrega fichas ao abrir novo orçamento — garante que fichas criadas
+    // em outras abas (sem remontar este componente) já apareçam no seletor
+    getAllSheets().then(setSheets).catch(() => {});
     setView('template-gallery');
   };
 
@@ -2478,6 +2486,8 @@ export default function BuffetQuotations() {
     setEditingQuotation(q);
     setActivePdfTemplate(null);
     setEditLoading(true);
+    // Recarrega fichas ao abrir edição — idem ao handleNewQuotation
+    getAllSheets().then(setSheets).catch(() => {});
 
     // getAllQuotations() retorna apenas cabeçalhos (sem items).
     // É obrigatório buscar o detalhe completo para carregar os itens existentes.
