@@ -21,6 +21,7 @@ import {
   addTemplateItem, updateTemplateItem, deleteTemplateItem,
 } from '../lib/templatesAPI.js';
 import { apiRequest } from '../lib/api';
+import { calcFinancials, priceFromMargin, DEFAULT_MARGIN_PCT as _DEFAULT_MARGIN } from '../lib/calcFinancials';
 
 // API de fichas técnicas (Etapa C/D)
 const getAllSheets = () => apiRequest('/api/technical-sheets').then(r => r.data || []);
@@ -620,21 +621,22 @@ const STATUS_CFG = {
 };
 
 const emptyForm = {
-  contact_mode: 'lead',
-  lead_id: '',
-  client_id: '',
-  temp_name: '',
-  event_type: '',
-  event_date: '',
-  guest_count: 0,
-  status: 'draft',
-  notes: '',
+  contact_mode:    'lead',
+  lead_id:         '',
+  client_id:       '',
+  temp_name:       '',
+  event_type:      '',
+  event_date:      '',
+  guest_count:     0,
+  status:          'draft',
+  notes:           '',
   discount_percent: 0,
+  default_margin:  40,  // % de margem sobre preço final (padrão buffet)
 };
 
-// Markup padrão sugerido ao vincular ficha técnica (100% = preço = 2× custo).
-// Configurável por tenant no futuro via settings API.
-const DEFAULT_MARKUP = 1.0;
+// Margem padrão sugerida (sobre o preço final, não markup sobre custo).
+// priceFromMargin(cost, 40) = cost / 0.60 — configurável por tenant no futuro.
+const DEFAULT_MARGIN_PCT = 40;
 
 const emptyItem = {
   item_name: '', quantity: 1, unit_price: 0,
@@ -643,8 +645,20 @@ const emptyItem = {
   sheet_cost_per_unit: 0,  // armazenado só no estado, não persiste no banco
 };
 
-const emptyFixedCost    = { id: '', description: '', category: 'outros', amount: '', notes: '' };
-const emptyVariableCost = { id: '', description: '', category: 'outros', calc_type: 'total', amount: '', notes: '' };
+const emptyFixedCost = {
+  id: '', description: '', category: 'outros', amount: '', notes: '',
+  // Repasse ao cliente
+  pass_to_client: false,  // false = apenas custo interno
+  pass_margin:    40,     // % de margem sobre preço final (usa fórmula margem, não markup)
+  pass_label:     '',     // nome comercial na proposta ("Taxa de logística", etc.)
+};
+
+const emptyVariableCost = {
+  id: '', description: '', category: 'outros', calc_type: 'total', amount: '', notes: '',
+  pass_to_client: false,
+  pass_margin:    40,
+  pass_label:     '',
+};
 
 const FIXED_COST_CATEGORIES    = ['logística','equipe','aluguel','taxas','embalagem','outros'];
 const VARIABLE_COST_CATEGORIES = ['descartável','bebida','comissão','operacional','outros'];
@@ -1497,35 +1511,106 @@ function ItemRow({ item, idx, onChange, onRemove, sheets = [], onSheetChange }) 
   );
 }
 
+// ─── Helper para row de custo (fixo ou variável) com repasse ─────────────────
+
+function CostRow({ c, idx, onChange, onRemove, efectiveAmount, extraFields }) {
+  const m          = Math.min(Math.max(Number(c.pass_margin) || 0, 0), 99.9);
+  const passValue  = c.pass_to_client ? priceFromMargin(efectiveAmount, m) : 0;
+  const passProfit = passValue - efectiveAmount;
+  const badgeStyle = c.pass_to_client
+    ? { background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' }
+    : { background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0' };
+
+  return (
+    <div style={{ background: c.pass_to_client ? '#fafffe' : 'white', border: '1px solid #e2e8f0', borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {/* Linha 1: campos principais */}
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 130px 110px auto 28px', gap: 8, alignItems: 'center' }}>
+        <input style={S.input} placeholder="Descrição (ex: Frete)" value={c.description} onChange={e => onChange(idx, 'description', e.target.value)} />
+        <select style={S.input} value={c.category} onChange={e => onChange(idx, 'category', e.target.value)}>
+          {FIXED_COST_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>)}
+        </select>
+        <input style={{ ...S.input, textAlign: 'right' }} type="number" min="0" step="0.01" placeholder="R$ 0,00" value={c.amount} onChange={e => onChange(idx, 'amount', e.target.value)} />
+        {/* Toggle: Repassar ao cliente */}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          <input type="checkbox" checked={!!c.pass_to_client} onChange={e => onChange(idx, 'pass_to_client', e.target.checked)}
+            style={{ width: 15, height: 15, accentColor: '#16a34a', cursor: 'pointer' }} />
+          <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Repassar ao cliente</span>
+        </label>
+        <button onClick={() => onRemove(idx)} style={{ background: '#fee2e2', border: 'none', borderRadius: 6, width: 26, height: 26, cursor: 'pointer', color: '#dc2626', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+      </div>
+
+      {/* Linha extra (se houver campos específicos como calc_type) */}
+      {extraFields}
+
+      {/* Linha 2 (repasse): configurações + preview de valor */}
+      {c.pass_to_client && (
+        <div style={{ display: 'grid', gridTemplateColumns: '80px 2fr 1fr', gap: 8, alignItems: 'center', paddingTop: 4, borderTop: '1px dashed #e2e8f0' }}>
+          <div>
+            <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', marginBottom: 2 }}>Margem %</div>
+            <input
+              style={{ ...S.input, textAlign: 'right', borderColor: m >= 100 ? '#fca5a5' : '#e2e8f0' }}
+              type="number" min="0" max="99.9" step="0.5"
+              value={c.pass_margin ?? 40}
+              onChange={e => onChange(idx, 'pass_margin', Number(e.target.value))}
+            />
+            {m >= 100 && <div style={{ fontSize: 9, color: '#dc2626' }}>Máx 99.9%</div>}
+          </div>
+          <div>
+            <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', marginBottom: 2 }}>Nome na proposta</div>
+            <input style={S.input} placeholder='Ex: "Taxa de logística"' value={c.pass_label || ''} onChange={e => onChange(idx, 'pass_label', e.target.value)} />
+          </div>
+          {/* Preview dos valores */}
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ ...badgeStyle, fontSize: 11, borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>
+              Proposta: R$ {fmt(passValue)}
+            </span>
+            <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600 }}>
+              Lucro: R$ {fmt(passProfit)}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {!c.pass_to_client && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ ...badgeStyle, fontSize: 10, borderRadius: 6, padding: '1px 8px', fontWeight: 600 }}>
+            Apenas custo interno — não entra no valor da proposta
+          </span>
+          <input style={{ ...S.input, flex: 1, fontSize: 12 }} placeholder="Observação (opcional)" value={c.notes || ''} onChange={e => onChange(idx, 'notes', e.target.value)} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── FIXED COSTS SECTION ──────────────────────────────────────────────────────
 
 function FixedCostsSection({ fixedCosts, onAdd, onChange, onRemove }) {
-  const total = fixedCosts.reduce((s, c) => s + (Number(c.amount) || 0), 0);
+  const custoTotal   = fixedCosts.reduce((s, c) => s + (Number(c.amount) || 0), 0);
+  const repasseTotal = fixedCosts.reduce((s, c) => {
+    if (!c.pass_to_client) return s;
+    const m = Number(c.pass_margin) || 0;
+    return s + priceFromMargin(Number(c.amount) || 0, m);
+  }, 0);
+
   return (
     <BuilderSection title="Custos Fixos da Festa" icon="🔩"
       action={
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {total > 0 && <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>Total: <strong style={{ color: '#0f172a' }}>R$ {fmt(total)}</strong></span>}
-          <button onClick={onAdd} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>+ Adicionar custo fixo</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {custoTotal > 0 && <span style={{ fontSize: 11, color: '#475569', fontWeight: 600 }}>Custo: <strong>R$ {fmt(custoTotal)}</strong></span>}
+          {repasseTotal > 0 && <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 700 }}>→ Proposta: R$ {fmt(repasseTotal)}</span>}
+          <button onClick={onAdd} style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>+ Custo fixo</button>
         </div>
       }
     >
       {fixedCosts.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '16px', color: '#94a3b8', fontSize: 13 }}>
-          Nenhum custo fixo adicionado. Exemplos: frete, equipe, gás, aluguel de material.
+        <div style={{ textAlign: 'center', padding: '14px', color: '#94a3b8', fontSize: 13 }}>
+          Nenhum custo fixo adicionado. Ex: frete, equipe, gás, aluguel de material.
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {fixedCosts.map((c, idx) => (
-            <div key={idx} style={{ display: 'grid', gridTemplateColumns: '2fr 140px 100px 1fr 32px', gap: 8, alignItems: 'center' }}>
-              <input style={S.input} placeholder="Descrição (ex: Frete)" value={c.description} onChange={e => onChange(idx, 'description', e.target.value)} />
-              <select style={S.input} value={c.category} onChange={e => onChange(idx, 'category', e.target.value)}>
-                {FIXED_COST_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>)}
-              </select>
-              <input style={{ ...S.input, textAlign: 'right' }} type="number" min="0" step="0.01" placeholder="R$ 0,00" value={c.amount} onChange={e => onChange(idx, 'amount', e.target.value)} />
-              <input style={S.input} placeholder="Observação (opcional)" value={c.notes} onChange={e => onChange(idx, 'notes', e.target.value)} />
-              <button onClick={() => onRemove(idx)} style={{ background: '#fee2e2', border: 'none', borderRadius: 6, width: 28, height: 28, cursor: 'pointer', color: '#dc2626', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
-            </div>
+            <CostRow key={idx} c={c} idx={idx} onChange={onChange} onRemove={onRemove} efectiveAmount={Number(c.amount) || 0} />
           ))}
         </div>
       )}
@@ -1537,42 +1622,49 @@ function FixedCostsSection({ fixedCosts, onAdd, onChange, onRemove }) {
 
 function VariableCostsSection({ variableCosts, guestCount, onAdd, onChange, onRemove }) {
   const guests = Number(guestCount) || 0;
-  const total  = variableCosts.reduce((s, c) => {
-    const amt = Number(c.amount) || 0;
-    return s + (c.calc_type === 'per_person' ? amt * guests : amt);
+
+  const custoTotal = variableCosts.reduce((s, c) => {
+    const a = Number(c.amount) || 0;
+    return s + (c.calc_type === 'per_person' ? a * guests : a);
   }, 0);
+  const repasseTotal = variableCosts.reduce((s, c) => {
+    if (!c.pass_to_client) return s;
+    const a = Number(c.amount) || 0;
+    const efetivo = c.calc_type === 'per_person' ? a * guests : a;
+    return s + priceFromMargin(efetivo, Number(c.pass_margin) || 0);
+  }, 0);
+
   return (
     <BuilderSection title="Custos Variáveis" icon="📊"
       action={
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {total > 0 && <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>Total: <strong style={{ color: '#0f172a' }}>R$ {fmt(total)}</strong></span>}
-          <button onClick={onAdd} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>+ Adicionar custo variável</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {custoTotal > 0 && <span style={{ fontSize: 11, color: '#475569', fontWeight: 600 }}>Custo: <strong>R$ {fmt(custoTotal)}</strong></span>}
+          {repasseTotal > 0 && <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 700 }}>→ Proposta: R$ {fmt(repasseTotal)}</span>}
+          <button onClick={onAdd} style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>+ Custo variável</button>
         </div>
       }
     >
       {variableCosts.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '16px', color: '#94a3b8', fontSize: 13 }}>
-          Nenhum custo variável adicionado. Exemplos: descartável por pessoa, bebida por convidado.
+        <div style={{ textAlign: 'center', padding: '14px', color: '#94a3b8', fontSize: 13 }}>
+          Nenhum custo variável adicionado. Ex: descartável por pessoa, bebida por convidado.
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {variableCosts.map((c, idx) => {
-            const lineTotal = c.calc_type === 'per_person' ? (Number(c.amount) || 0) * guests : (Number(c.amount) || 0);
+            const a       = Number(c.amount) || 0;
+            const efetivo = c.calc_type === 'per_person' ? a * guests : a;
             return (
-              <div key={idx} style={{ display: 'grid', gridTemplateColumns: '2fr 140px 140px 100px 1fr 80px 32px', gap: 8, alignItems: 'center' }}>
-                <input style={S.input} placeholder="Descrição" value={c.description} onChange={e => onChange(idx, 'description', e.target.value)} />
-                <select style={S.input} value={c.category} onChange={e => onChange(idx, 'category', e.target.value)}>
-                  {VARIABLE_COST_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>)}
-                </select>
-                <select style={S.input} value={c.calc_type} onChange={e => onChange(idx, 'calc_type', e.target.value)}>
-                  <option value="per_person">Por pessoa</option>
-                  <option value="total">Valor total</option>
-                </select>
-                <input style={{ ...S.input, textAlign: 'right' }} type="number" min="0" step="0.01" placeholder="R$ 0,00" value={c.amount} onChange={e => onChange(idx, 'amount', e.target.value)} />
-                <input style={S.input} placeholder="Observação (opcional)" value={c.notes} onChange={e => onChange(idx, 'notes', e.target.value)} />
-                <div style={{ fontSize: 12, color: '#475569', fontWeight: 600, textAlign: 'right' }}>R$ {fmt(lineTotal)}</div>
-                <button onClick={() => onRemove(idx)} style={{ background: '#fee2e2', border: 'none', borderRadius: 6, width: 28, height: 28, cursor: 'pointer', color: '#dc2626', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
-              </div>
+              <CostRow key={idx} c={c} idx={idx} onChange={onChange} onRemove={onRemove} efectiveAmount={efetivo}
+                extraFields={
+                  <div style={{ display: 'grid', gridTemplateColumns: '150px 90px auto', gap: 8, alignItems: 'center', paddingTop: 2 }}>
+                    <select style={S.input} value={c.calc_type} onChange={e => onChange(idx, 'calc_type', e.target.value)}>
+                      <option value="per_person">Por pessoa</option>
+                      <option value="total">Valor total</option>
+                    </select>
+                    <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Total: R$ {fmt(efetivo)}</div>
+                  </div>
+                }
+              />
             );
           })}
         </div>
@@ -1599,15 +1691,21 @@ function SectionLabel({ label }) {
 }
 
 function FinancialSidebar({
-  fin,
-  guestCount,
-  onSave, loading, editingQuotation, status, onApprove, onCancel, onConvertToEvent,
+  fin, guestCount, defaultMargin,
+  onSave, loading, editingQuotation, status,
+  onApprove, onCancel, onConvertToEvent,
+  onApplyMarginToCosts, onDistributeGap, onAddOperationalFee,
 }) {
-  const { subtotal, discountAmt, receita, precoVendaPessoa,
-          custoFichas, custoVariavel, custoFixo, custoTotal, custoPessoa,
-          lucro, margemPct, lucroPessoa, margemAlerta } = fin;
+  const {
+    subtotalItens, discountAmt, receitaItens, receitaRepasse, receitaTotal, receitaTotalPessoa,
+    custoFichas, custoVariavel, custoFixo, custoTotal, custoPessoa,
+    lucro, margemReal, lucroPessoa, margemAlerta,
+    receitaRecomendada, diferencaParaMargem, precoRecomendadoPessoa,
+  } = fin;
 
-  const hasCosts = custoTotal > 0;
+  const hasCosts   = custoTotal > 0;
+  const hasRepasse = receitaRepasse > 0;
+  const guests     = Number(guestCount) || 0;
 
   const alertStyle = margemAlerta === 'danger'
     ? { background: '#fee2e2', border: '1px solid #fca5a5', color: '#991b1b' }
@@ -1615,38 +1713,39 @@ function FinancialSidebar({
 
   return (
     <div style={{ ...S.card, boxShadow: '0 4px 24px rgba(0,0,0,0.07)' }}>
-      <div style={{ padding: '16px 18px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ fontSize: 16 }}>💰</span>
+      <div style={{ padding: '14px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span>💰</span>
         <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#0f172a' }}>Resumo Financeiro</h3>
       </div>
 
-      <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
 
         {/* ── RECEITA ── */}
         <div>
           <SectionLabel label="Receita" />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <FinRow label="Subtotal da proposta" value={`R$ ${fmt(subtotal)}`} />
-            {discountAmt > 0 && <FinRow label="Desconto" value={`−R$ ${fmt(discountAmt)}`} valueColor="#dc2626" />}
-            <FinRow label="Receita líquida" value={`R$ ${fmt(receita)}`} bold />
-            {guestCount > 0 && <FinRow label="Preço por pessoa" value={`R$ ${fmt(precoVendaPessoa)}`} muted />}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <FinRow label="Itens do evento" value={`R$ ${fmt(receitaItens)}`} />
+            {discountAmt > 0 && <FinRow label="Desconto aplicado" value={`−R$ ${fmt(discountAmt)}`} valueColor="#dc2626" />}
+            {hasRepasse && <FinRow label="Custos repassados" value={`+R$ ${fmt(receitaRepasse)}`} valueColor="#16a34a" />}
+            <FinRow label="Receita total" value={`R$ ${fmt(receitaTotal)}`} bold />
+            {guests > 0 && <FinRow label="Receita por pessoa" value={`R$ ${fmt(receitaTotalPessoa)}`} muted />}
           </div>
         </div>
 
         <div style={{ height: 1, background: '#f1f5f9' }} />
 
-        {/* ── CUSTOS ── */}
+        {/* ── CUSTOS INTERNOS ── */}
         <div>
-          <SectionLabel label="Custos Internos" />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {custoFichas > 0 && <FinRow label="Fichas técnicas" value={`R$ ${fmt(custoFichas)}`} />}
-            {custoVariavel > 0 && <FinRow label="Custos variáveis" value={`R$ ${fmt(custoVariavel)}`} />}
-            {custoFixo > 0 && <FinRow label="Custos fixos" value={`R$ ${fmt(custoFixo)}`} />}
+          <SectionLabel label="Custos Internos da Festa" />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {custoFichas > 0    && <FinRow label="Fichas técnicas"  value={`R$ ${fmt(custoFichas)}`} />}
+            {custoVariavel > 0  && <FinRow label="Custos variáveis" value={`R$ ${fmt(custoVariavel)}`} />}
+            {custoFixo > 0      && <FinRow label="Custos fixos"     value={`R$ ${fmt(custoFixo)}`} />}
             {hasCosts
               ? <FinRow label="Custo total da festa" value={`R$ ${fmt(custoTotal)}`} bold />
               : <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Nenhum custo interno registrado</div>
             }
-            {hasCosts && guestCount > 0 && <FinRow label="Custo por pessoa" value={`R$ ${fmt(custoPessoa)}`} muted />}
+            {hasCosts && guests > 0 && <FinRow label="Custo por pessoa" value={`R$ ${fmt(custoPessoa)}`} muted />}
           </div>
         </div>
 
@@ -1656,44 +1755,85 @@ function FinancialSidebar({
         {hasCosts && (
           <div>
             <SectionLabel label="Resultado" />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               <FinRow label="Lucro estimado" value={`R$ ${fmt(lucro)}`} bold valueColor={lucro >= 0 ? '#16a34a' : '#dc2626'} />
-              <FinRow label="Margem" value={`${margemPct.toFixed(1)}%`} bold valueColor={lucro >= 0 ? '#16a34a' : '#dc2626'} />
-              {guestCount > 0 && <FinRow label="Lucro por pessoa" value={`R$ ${fmt(lucroPessoa)}`} muted />}
+              <FinRow label="Margem real" value={`${margemReal.toFixed(1)}%`} bold valueColor={lucro >= 0 ? '#16a34a' : '#dc2626'} />
+              {guests > 0 && <FinRow label="Lucro por pessoa"  value={`R$ ${fmt(lucroPessoa)}`} muted />}
             </div>
           </div>
         )}
 
         {/* Alerta de margem */}
         {margemAlerta && (
-          <div style={{ ...alertStyle, borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 600 }}>
-            {margemAlerta === 'danger' ? '🔴 Margem crítica' : '🟡 Margem baixa'} ({margemPct.toFixed(1)}%)
-            — revise os custos ou o valor da proposta.
+          <div style={{ ...alertStyle, borderRadius: 8, padding: '8px 10px', fontSize: 11, fontWeight: 600 }}>
+            {margemAlerta === 'danger' ? '🔴 Margem crítica' : '🟡 Margem baixa'} ({margemReal.toFixed(1)}%)
           </div>
         )}
 
         {/* Valor total destacado */}
-        <div style={{ background: 'linear-gradient(135deg,#eff6ff,#dbeafe)', borderRadius: 12, padding: '14px 16px', border: '1px solid #bfdbfe' }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Valor total da proposta</div>
-          <div style={{ fontSize: 24, fontWeight: 700, color: '#1e40af', lineHeight: 1 }}>R$ {fmt(receita)}</div>
-          {guestCount > 0 && (
-            <div style={{ fontSize: 11, color: '#3b82f6', marginTop: 4 }}>R$ {fmt(precoVendaPessoa)} / pessoa · {guestCount} convidados</div>
+        <div style={{ background: 'linear-gradient(135deg,#eff6ff,#dbeafe)', borderRadius: 12, padding: '12px 14px', border: '1px solid #bfdbfe' }}>
+          <div style={{ fontSize: 9, fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Valor total da proposta</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: '#1e40af', lineHeight: 1 }}>R$ {fmt(receitaTotal)}</div>
+          {guests > 0 && (
+            <div style={{ fontSize: 10, color: '#3b82f6', marginTop: 3 }}>R$ {fmt(receitaTotalPessoa)} / pessoa · {guests} convidados</div>
           )}
         </div>
 
-        {/* Ações */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {/* ── PRECIFICAÇÃO INTELIGENTE ── */}
+        {hasCosts && (
+          <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+              🎯 Precificação Inteligente
+              <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>(margem = lucro / receita)</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <FinRow label="Margem desejada" value={`${Number(defaultMargin).toFixed(1)}%`} />
+              <FinRow label="Receita atual" value={`R$ ${fmt(receitaTotal)}`} />
+              <FinRow label="Receita recomendada" value={`R$ ${fmt(receitaRecomendada)}`} bold />
+              {guests > 0 && <FinRow label="Preço/pessoa recomendado" value={`R$ ${fmt(precoRecomendadoPessoa)}`} />}
+              {diferencaParaMargem > 0.01 && (
+                <div style={{ marginTop: 4, fontSize: 11, color: '#b45309', fontWeight: 600, background: '#fefce8', borderRadius: 6, padding: '4px 8px' }}>
+                  Faltam R$ {fmt(diferencaParaMargem)} para atingir {Number(defaultMargin).toFixed(0)}% de margem
+                </div>
+              )}
+              {diferencaParaMargem <= 0.01 && receitaTotal > 0 && (
+                <div style={{ marginTop: 4, fontSize: 11, color: '#166534', fontWeight: 600, background: '#f0fdf4', borderRadius: 6, padding: '4px 8px' }}>
+                  ✓ Margem desejada atingida
+                </div>
+              )}
+            </div>
+            {/* Ações rápidas de precificação */}
+            {diferencaParaMargem > 0.01 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 8, paddingTop: 8, borderTop: '1px dashed #e2e8f0' }}>
+                <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', marginBottom: 2 }}>Ações rápidas</div>
+                {onDistributeGap && (
+                  <button onClick={onDistributeGap} style={{ width: '100%', padding: '7px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'white', color: '#475569', fontSize: 11, fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}>
+                    ↑ Distribuir diferença nos itens
+                  </button>
+                )}
+                {onAddOperationalFee && (
+                  <button onClick={onAddOperationalFee} style={{ width: '100%', padding: '7px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'white', color: '#475569', fontSize: 11, fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}>
+                    + Adicionar como taxa operacional
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Ações de salvar/aprovar */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
           <button onClick={onSave} disabled={loading} style={{ width: '100%', padding: '11px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#3b82f6,#2563eb)', color: 'white', fontSize: 13, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
             {loading ? 'Salvando...' : editingQuotation ? '💾 Salvar alterações' : '✓ Criar orçamento'}
           </button>
           {editingQuotation && status !== 'approved' && status !== 'cancelled' && (
-            <button onClick={onApprove} style={{ width: '100%', padding: '11px', borderRadius: 10, border: 'none', background: '#dcfce7', color: '#16a34a', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>✓ Aprovar proposta</button>
+            <button onClick={onApprove} style={{ width: '100%', padding: '10px', borderRadius: 10, border: 'none', background: '#dcfce7', color: '#16a34a', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>✓ Aprovar proposta</button>
           )}
           {editingQuotation && status !== 'cancelled' && (
-            <button onClick={onCancel} style={{ width: '100%', padding: '11px', borderRadius: 10, border: '1px solid #fed7aa', background: '#fff7ed', color: '#ea580c', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>✕ Cancelar orçamento</button>
+            <button onClick={onCancel} style={{ width: '100%', padding: '10px', borderRadius: 10, border: '1px solid #fed7aa', background: '#fff7ed', color: '#ea580c', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>✕ Cancelar orçamento</button>
           )}
           {editingQuotation && status === 'approved' && onConvertToEvent && (
-            <button onClick={onConvertToEvent} style={{ width: '100%', padding: '11px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#7c3aed,#6d28d9)', color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>📅 Converter em Evento</button>
+            <button onClick={onConvertToEvent} style={{ width: '100%', padding: '10px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#7c3aed,#6d28d9)', color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>📅 Converter em Evento</button>
           )}
         </div>
       </div>
@@ -1711,49 +1851,32 @@ function QuotationBuilder({
   onVariableCostAdd, onVariableCostChange, onVariableCostRemove,
   onItemSheetChange,
   onAddBlock, onSubmit, onBack, onApprove, onCancel, onChangeTemplate, onConvertToEvent,
+  onDistributeGap, onAddOperationalFee,
 }) {
   const [showBlocks, setShowBlocks] = useState(false);
 
-  // Cálculo financeiro centralizado via helper (Etapa E)
-  const guestCount = Number(form.guest_count) || 0;
-  const fin = {
-    subtotal:        items.reduce((s, i) => s + (Number(i.quantity) || 0) * (Number(i.unit_price) || 0), 0),
-    discountAmt:     0,
-    receita:         0,
-    precoVendaPessoa: 0,
-    custoFichas:     items.reduce((s, i) => s + (Number(i.sheet_cost) || 0), 0),
-    custoVariavel:   variableCosts.reduce((s, c) => { const a = Number(c.amount) || 0; return s + (c.calc_type === 'per_person' ? a * guestCount : a); }, 0),
-    custoFixo:       fixedCosts.reduce((s, c) => s + (Number(c.amount) || 0), 0),
-    custoTotal:      0,
-    custoPessoa:     0,
-    lucro:           0,
-    margemPct:       0,
-    lucroPessoa:     0,
-    margemAlerta:    null,
-  };
-  fin.discountAmt       = fin.subtotal * ((Number(form.discount_percent) || 0) / 100);
-  fin.receita           = fin.subtotal - fin.discountAmt;
-  fin.precoVendaPessoa  = guestCount > 0 ? fin.receita / guestCount : 0;
-  fin.custoTotal        = fin.custoFichas + fin.custoVariavel + fin.custoFixo;
-  fin.custoPessoa       = guestCount > 0 ? fin.custoTotal / guestCount : 0;
-  fin.lucro             = fin.receita - fin.custoTotal;
-  fin.margemPct         = fin.receita > 0 ? (fin.lucro / fin.receita) * 100 : 0;
-  fin.lucroPessoa       = guestCount > 0 ? fin.lucro / guestCount : 0;
-  if (fin.receita > 0 && fin.custoTotal > 0) {
-    if (fin.margemPct < MARGIN_THRESHOLDS.danger)        fin.margemAlerta = 'danger';
-    else if (fin.margemPct < MARGIN_THRESHOLDS.warning)  fin.margemAlerta = 'warning';
-  }
+  // Cálculo financeiro centralizado — usa engine do calcFinancials.js
+  const guestCount    = Number(form.guest_count)    || 0;
+  const defaultMargin = Number(form.default_margin) || DEFAULT_MARGIN_PCT;
+
+  const fin = calcFinancials({
+    items, fixedCosts, variableCosts,
+    discountPct:   Number(form.discount_percent) || 0,
+    guestCount,
+    defaultMargin,
+    thresholds: MARGIN_THRESHOLDS,
+  });
 
   const contactName =
     leads.find(l => String(l.id) === String(form.lead_id))?.name || 'Selecione o lead';
 
   const heroMetrics = [
-    { label: 'Valor Total',   value: `R$ ${fmt(fin.receita)}`,                                           icon: '💰', color: '#2563eb' },
-    { label: 'Lucro Est.',    value: fin.custoTotal > 0 ? `R$ ${fmt(fin.lucro)}` : '—',                  icon: '📈', color: fin.lucro >= 0 ? '#16a34a' : '#dc2626' },
-    { label: 'Convidados',    value: guestCount > 0 ? guestCount : '—',                                  icon: '👥', color: '#7c3aed' },
-    { label: 'Data',          value: form.event_date ? new Date(form.event_date + 'T00:00').toLocaleDateString('pt-BR') : '—', icon: '📅', color: '#f59e0b' },
-    { label: 'Custo/Pessoa',  value: fin.custoTotal > 0 && guestCount > 0 ? `R$ ${fmt(fin.custoPessoa)}` : '—', icon: '🧮', color: '#06b6d4' },
-    { label: 'Margem',        value: fin.custoTotal > 0 ? `${fin.margemPct.toFixed(1)}%` : '—',          icon: '📊', color: fin.margemPct >= 25 ? '#16a34a' : fin.margemPct >= 15 ? '#f59e0b' : '#dc2626' },
+    { label: 'Valor Total',  value: `R$ ${fmt(fin.receitaTotal)}`,                                                   icon: '💰', color: '#2563eb' },
+    { label: 'Lucro Est.',   value: fin.custoTotal > 0 ? `R$ ${fmt(fin.lucro)}` : '—',                               icon: '📈', color: fin.lucro >= 0 ? '#16a34a' : '#dc2626' },
+    { label: 'Convidados',   value: guestCount > 0 ? guestCount : '—',                                               icon: '👥', color: '#7c3aed' },
+    { label: 'Data',         value: form.event_date ? new Date(form.event_date + 'T00:00').toLocaleDateString('pt-BR') : '—', icon: '📅', color: '#f59e0b' },
+    { label: 'Custo/Pessoa', value: fin.custoTotal > 0 && guestCount > 0 ? `R$ ${fmt(fin.custoPessoa)}` : '—',       icon: '🧮', color: '#06b6d4' },
+    { label: 'Margem',       value: fin.custoTotal > 0 ? `${fin.margemReal.toFixed(1)}%` : '—',                      icon: '📊', color: fin.margemReal >= 25 ? '#16a34a' : fin.margemReal >= 15 ? '#f59e0b' : '#dc2626' },
   ];
 
   return (
@@ -1992,15 +2115,21 @@ function QuotationBuilder({
 
           {/* Configurações Financeiras */}
           <BuilderSection title="Configurações Financeiras" icon="💳">
-            <div className="qs-form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div className="qs-form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
               <div>
-                <label style={S.label}>Desconto (%)</label>
-                <input
-                  type="number" min={0} max={100} step="0.1"
+                <label style={S.label}>Desconto na proposta (%)</label>
+                <input type="number" min={0} max={100} step="0.1"
                   value={form.discount_percent}
                   onChange={e => onFieldChange('discount_percent', e.target.value)}
-                  placeholder="0" style={S.input}
-                />
+                  placeholder="0" style={S.input} />
+              </div>
+              <div>
+                <label style={S.label}>Margem desejada (%)</label>
+                <input type="number" min={0} max={99.9} step="0.5"
+                  value={form.default_margin ?? DEFAULT_MARGIN_PCT}
+                  onChange={e => onFieldChange('default_margin', e.target.value)}
+                  placeholder="40" style={{ ...S.input, borderColor: '#bfdbfe' }} />
+                <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>Margem = lucro / receita (não markup)</div>
               </div>
               <div>
                 <label style={S.label}>Status do Orçamento</label>
@@ -2022,6 +2151,7 @@ function QuotationBuilder({
             <FinancialSidebar
               fin={fin}
               guestCount={form.guest_count}
+              defaultMargin={form.default_margin ?? DEFAULT_MARGIN_PCT}
               onSave={onSubmit}
               loading={loading}
               editingQuotation={editingQuotation}
@@ -2029,6 +2159,8 @@ function QuotationBuilder({
               onApprove={onApprove}
               onCancel={onCancel}
               onConvertToEvent={onConvertToEvent}
+              onDistributeGap={onDistributeGap}
+              onAddOperationalFee={onAddOperationalFee}
             />
           </div>
         </div>
@@ -2403,8 +2535,9 @@ export default function BuffetQuotations() {
       const qty = guests > 0 ? guests : baseYield;
       const sheetCost = costPerUnit * qty;
 
-      // Preço sugerido = custo × (1 + markup). Só preenche se item ainda sem preço.
-      const suggestedPrice = costPerUnit * (1 + DEFAULT_MARKUP);
+      // Preço sugerido usando margem sobre preço final: custo / (1 - margem)
+      const dm = Math.min(Math.max(Number(form.default_margin) || DEFAULT_MARGIN_PCT, 0), 99.9);
+      const suggestedPrice = priceFromMargin(costPerUnit, dm);
 
       setItems(curr => curr.map((item, i) => {
         if (i !== idx) return item;
@@ -2429,6 +2562,38 @@ export default function BuffetQuotations() {
           : item
       ));
     }
+  };
+
+  // ── Precificação Inteligente ─────────────────────────────────────────────────
+
+  // Distribui a diferença necessária proporcionalmente nos itens existentes
+  const handleDistributeGap = () => {
+    const dm   = Math.min(Math.max(Number(form.default_margin) || DEFAULT_MARGIN_PCT, 0), 99.9);
+    const fin  = calcFinancials({ items, fixedCosts, variableCosts, discountPct: Number(form.discount_percent) || 0, guestCount: Number(form.guest_count) || 0, defaultMargin: dm });
+    const diff = fin.diferencaParaMargem;
+    if (diff <= 0.01) { showMsg('error', 'A margem desejada já foi atingida.'); return; }
+    const totalVenda = items.reduce((s, i) => s + (Number(i.quantity) || 0) * (Number(i.unit_price) || 0), 0);
+    if (totalVenda <= 0) { showMsg('error', 'Adicione itens com valor de venda antes de distribuir.'); return; }
+    setItems(curr => curr.map(i => {
+      const subtItem  = (Number(i.quantity) || 0) * (Number(i.unit_price) || 0);
+      const prop      = totalVenda > 0 ? subtItem / totalVenda : 0;
+      const acrescimo = prop * diff;
+      const qty       = Number(i.quantity) || 1;
+      const newPrice  = qty > 0 ? (subtItem + acrescimo) / qty : Number(i.unit_price);
+      return { ...i, unit_price: Math.round(newPrice * 100) / 100 };
+    }));
+    showMsg('success', `Diferença de R$ ${fmt(diff)} distribuída proporcionalmente nos itens.`);
+  };
+
+  // Adiciona um item "Taxa operacional" com o valor necessário para atingir a margem
+  const handleAddOperationalFee = () => {
+    const dm   = Math.min(Math.max(Number(form.default_margin) || DEFAULT_MARGIN_PCT, 0), 99.9);
+    const fin  = calcFinancials({ items, fixedCosts, variableCosts, discountPct: Number(form.discount_percent) || 0, guestCount: Number(form.guest_count) || 0, defaultMargin: dm });
+    const diff = fin.diferencaParaMargem;
+    if (diff <= 0.01) { showMsg('error', 'A margem desejada já foi atingida.'); return; }
+    const feeItem = { ...emptyItem, item_name: 'Taxa operacional', quantity: 1, unit_price: Math.round(diff * 100) / 100 };
+    setItems(curr => [...curr, feeItem]);
+    showMsg('success', `Item "Taxa operacional" de R$ ${fmt(diff)} adicionado.`);
   };
 
   // ── Handlers de Custos Fixos (Etapa A) ──────────────────────────────────────
@@ -2508,9 +2673,10 @@ export default function BuffetQuotations() {
       event_type:   full.event_type   || '',
       event_date:   full.event_date ? full.event_date.split('T')[0] : '',
       guest_count:  full.guest_count  || 0,
-      status:       full.status       || 'draft',
-      notes:        full.notes        || '',
+      status:           full.status           || 'draft',
+      notes:            full.notes            || '',
       discount_percent: full.discount_percent || 0,
+      default_margin:   full.default_margin   != null ? Number(full.default_margin) : DEFAULT_MARGIN_PCT,
     });
 
     // Deriva quantity_per_person = quantidade ÷ convidados originais.
@@ -2559,6 +2725,7 @@ export default function BuffetQuotations() {
         guest_count:      Number(form.guest_count) || 0,
         event_date:       form.event_date || null,
         discount_percent: Number(form.discount_percent) || 0,
+        default_margin:   Number(form.default_margin)   ?? DEFAULT_MARGIN_PCT,
         fixed_costs:      cleanFixed,
         variable_costs:   cleanVariable,
         items: items.map(i => ({
@@ -2764,6 +2931,8 @@ export default function BuffetQuotations() {
           onCancel={() => editingQuotation && handleCancel(editingQuotation)}
           onChangeTemplate={() => setView('template-gallery')}
           onConvertToEvent={() => handleConvertToEvent(null)}
+          onDistributeGap={handleDistributeGap}
+          onAddOperationalFee={handleAddOperationalFee}
         />
       )}
 

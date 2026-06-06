@@ -11,7 +11,7 @@ function computeQuotationTotal(items = []) {
 async function createQuotation({
   client_id, lead_id, event_type, guest_count, event_date,
   items = [], notes = '', tenant_id, discount_percent = 0,
-  fixed_costs = [], variable_costs = [],
+  fixed_costs = [], variable_costs = [], default_margin = 40,
 }) {
   const subtotal = computeQuotationTotal(items);
   const total = subtotal * (1 - (Number(discount_percent) || 0) / 100);
@@ -26,8 +26,8 @@ async function createQuotation({
       INSERT INTO quotations
         (tenant_id, client_id, lead_id, event_type, guest_count, event_date,
          total_amount, status, notes, discount_percent, fixed_costs, variable_costs,
-         created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+         default_margin, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
       RETURNING *
     `;
 
@@ -44,6 +44,7 @@ async function createQuotation({
       Number(discount_percent) || 0,
       safeJSON(fixed_costs),
       safeJSON(variable_costs),
+      Number(default_margin) ?? 40,
     ]);
 
     const quotationId = result.rows[0].id;
@@ -134,7 +135,7 @@ async function updateQuotation(quotationId, data, tenant_id) {
   const values = [];
   let paramCount = 1;
 
-  const updatableFields = ['client_id', 'lead_id', 'event_type', 'guest_count', 'event_date', 'total_amount', 'status', 'notes', 'validity_days', 'discount_percent', 'fixed_costs', 'variable_costs'];
+  const updatableFields = ['client_id', 'lead_id', 'event_type', 'guest_count', 'event_date', 'total_amount', 'status', 'notes', 'validity_days', 'discount_percent', 'fixed_costs', 'variable_costs', 'default_margin'];
   // Campos que não podem ser string vazia no PostgreSQL — converte para null
   const nullableFields  = new Set(['client_id', 'lead_id', 'event_date']);
 
@@ -224,6 +225,7 @@ async function duplicateQuotation(quotationId, tenant_id, clientId, leadId) {
     discount_percent: Number(original.discount_percent) || 0,
     fixed_costs:     Array.isArray(original.fixed_costs)    ? original.fixed_costs    : [],
     variable_costs:  Array.isArray(original.variable_costs) ? original.variable_costs : [],
+    default_margin:  Number(original.default_margin) || 40,
     items: original.items.map((item) => ({
       item_name:  item.item_name,
       quantity:   item.quantity,

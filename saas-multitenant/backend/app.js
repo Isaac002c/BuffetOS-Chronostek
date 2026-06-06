@@ -330,6 +330,14 @@ if (process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL && !proce
     console.warn(' Migration warning (audit_logs):', err.message);
   }
 
+  // Margem padrão do orçamento (% de lucro sobre o preço final — padrão buffet: 40%)
+  try {
+    await pool.query(`ALTER TABLE quotations ADD COLUMN IF NOT EXISTS default_margin NUMERIC NOT NULL DEFAULT 40`);
+    console.log(' Migration: quotations.default_margin garantido');
+  } catch (err) {
+    console.warn(' Migration warning (default_margin):', err.message);
+  }
+
   // ETAPA A: custos fixos do orçamento (JSONB, retrocompat com DEFAULT '[]')
   try {
     await pool.query(`ALTER TABLE quotations ADD COLUMN IF NOT EXISTS fixed_costs JSONB NOT NULL DEFAULT '[]'`);
