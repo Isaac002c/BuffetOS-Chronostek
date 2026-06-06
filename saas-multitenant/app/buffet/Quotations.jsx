@@ -1802,20 +1802,34 @@ function FinancialSidebar({
                 </div>
               )}
             </div>
-            {/* Ações rápidas de precificação */}
-            {diferencaParaMargem > 0.01 && (
+            {/* Ações rápidas — sempre visíveis, desabilitadas quando margem atingida */}
+            {(onDistributeGap || onAddOperationalFee) && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 8, paddingTop: 8, borderTop: '1px dashed #e2e8f0' }}>
                 <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', marginBottom: 2 }}>Ações rápidas</div>
-                {onDistributeGap && (
-                  <button onClick={onDistributeGap} style={{ width: '100%', padding: '7px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'white', color: '#475569', fontSize: 11, fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}>
-                    ↑ Distribuir diferença nos itens
-                  </button>
-                )}
-                {onAddOperationalFee && (
-                  <button onClick={onAddOperationalFee} style={{ width: '100%', padding: '7px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'white', color: '#475569', fontSize: 11, fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}>
-                    + Adicionar como taxa operacional
-                  </button>
-                )}
+                {onDistributeGap && (() => {
+                  const disabled = diferencaParaMargem <= 0.01;
+                  return (
+                    <button
+                      onClick={disabled ? undefined : onDistributeGap}
+                      disabled={disabled}
+                      title={disabled ? 'Margem desejada já atingida' : `Distribuir R$ ${fmt(diferencaParaMargem)} nos itens`}
+                      style={{ width: '100%', padding: '7px', borderRadius: 8, border: '1px solid #e2e8f0', background: disabled ? '#f8fafc' : 'white', color: disabled ? '#cbd5e1' : '#475569', fontSize: 11, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer', textAlign: 'left', opacity: disabled ? 0.6 : 1 }}>
+                      ↑ Distribuir diferença nos itens
+                    </button>
+                  );
+                })()}
+                {onAddOperationalFee && (() => {
+                  const disabled = diferencaParaMargem <= 0.01;
+                  return (
+                    <button
+                      onClick={disabled ? undefined : onAddOperationalFee}
+                      disabled={disabled}
+                      title={disabled ? 'Margem desejada já atingida' : `Adicionar taxa de R$ ${fmt(diferencaParaMargem)}`}
+                      style={{ width: '100%', padding: '7px', borderRadius: 8, border: '1px solid #e2e8f0', background: disabled ? '#f8fafc' : 'white', color: disabled ? '#cbd5e1' : '#475569', fontSize: 11, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer', textAlign: 'left', opacity: disabled ? 0.6 : 1 }}>
+                      + Adicionar diferença como taxa operacional
+                    </button>
+                  );
+                })()}
               </div>
             )}
           </div>
@@ -2566,34 +2580,71 @@ export default function BuffetQuotations() {
 
   // ── Precificação Inteligente ─────────────────────────────────────────────────
 
-  // Distribui a diferença necessária proporcionalmente nos itens existentes
+  // Identificador da taxa operacional criada automaticamente.
+  // Usamos item_name como marcador para detectar e atualizar (não duplicar).
+  const OPERATIONAL_FEE_NAME = 'Taxa operacional';
+
+  // Calcula a diferença faltante usando o estado atual completo.
+  // receitaTotal já inclui: itens + custos repassados + taxa operacional existente.
+  // Portanto, se já foi adicionada taxa suficiente OU custos repassados cobrem,
+  // diff será <= 0 e as ações ficam desabilitadas.
+  const _currentFin = () => calcFinancials({
+    items, fixedCosts, variableCosts,
+    discountPct:   Number(form.discount_percent) || 0,
+    guestCount:    Number(form.guest_count) || 0,
+    defaultMargin: Math.min(Math.max(Number(form.default_margin) || DEFAULT_MARGIN_PCT, 0), 99.9),
+  });
+
+  // Distribui a diferença faltante nos itens REAIS (exclui taxa operacional automática).
+  // Isso evita distribuir em cima de uma taxa que o próprio sistema criou.
   const handleDistributeGap = () => {
-    const dm   = Math.min(Math.max(Number(form.default_margin) || DEFAULT_MARGIN_PCT, 0), 99.9);
-    const fin  = calcFinancials({ items, fixedCosts, variableCosts, discountPct: Number(form.discount_percent) || 0, guestCount: Number(form.guest_count) || 0, defaultMargin: dm });
+    const fin  = _currentFin();
     const diff = fin.diferencaParaMargem;
-    if (diff <= 0.01) { showMsg('error', 'A margem desejada já foi atingida.'); return; }
-    const totalVenda = items.reduce((s, i) => s + (Number(i.quantity) || 0) * (Number(i.unit_price) || 0), 0);
+    if (diff <= 0.01) { showMsg('error', 'A margem desejada já foi atingida. Não há diferença para distribuir.'); return; }
+
+    // Itens reais = todos exceto a taxa operacional criada automaticamente
+    const realItems = items.filter(i => i.item_name !== OPERATIONAL_FEE_NAME);
+    const totalVenda = realItems.reduce((s, i) => s + (Number(i.quantity) || 0) * (Number(i.unit_price) || 0), 0);
     if (totalVenda <= 0) { showMsg('error', 'Adicione itens com valor de venda antes de distribuir.'); return; }
+
     setItems(curr => curr.map(i => {
+      // Taxa operacional: não mexe
+      if (i.item_name === OPERATIONAL_FEE_NAME) return i;
       const subtItem  = (Number(i.quantity) || 0) * (Number(i.unit_price) || 0);
-      const prop      = totalVenda > 0 ? subtItem / totalVenda : 0;
+      const prop      = subtItem / totalVenda;
       const acrescimo = prop * diff;
       const qty       = Number(i.quantity) || 1;
       const newPrice  = qty > 0 ? (subtItem + acrescimo) / qty : Number(i.unit_price);
       return { ...i, unit_price: Math.round(newPrice * 100) / 100 };
     }));
-    showMsg('success', `Diferença de R$ ${fmt(diff)} distribuída proporcionalmente nos itens.`);
+    showMsg('success', `Diferença de R$ ${fmt(diff)} distribuída nos itens da proposta.`);
   };
 
-  // Adiciona um item "Taxa operacional" com o valor necessário para atingir a margem
+  // Adiciona (ou atualiza) a taxa operacional com APENAS a diferença faltante.
+  // A diferença já considera: itens + custos repassados + taxa existente.
+  // Clicar várias vezes atualiza o mesmo item em vez de criar duplicatas.
   const handleAddOperationalFee = () => {
-    const dm   = Math.min(Math.max(Number(form.default_margin) || DEFAULT_MARGIN_PCT, 0), 99.9);
-    const fin  = calcFinancials({ items, fixedCosts, variableCosts, discountPct: Number(form.discount_percent) || 0, guestCount: Number(form.guest_count) || 0, defaultMargin: dm });
+    const fin  = _currentFin();
     const diff = fin.diferencaParaMargem;
-    if (diff <= 0.01) { showMsg('error', 'A margem desejada já foi atingida.'); return; }
-    const feeItem = { ...emptyItem, item_name: 'Taxa operacional', quantity: 1, unit_price: Math.round(diff * 100) / 100 };
-    setItems(curr => [...curr, feeItem]);
-    showMsg('success', `Item "Taxa operacional" de R$ ${fmt(diff)} adicionado.`);
+    if (diff <= 0.01) {
+      showMsg('error', 'A margem desejada já foi atingida. Não há diferença para adicionar.');
+      return;
+    }
+    const newPrice = Math.round(diff * 100) / 100;
+    const existingIdx = items.findIndex(i => i.item_name === OPERATIONAL_FEE_NAME);
+
+    if (existingIdx >= 0) {
+      // Atualiza a taxa existente em vez de criar nova (evita duplicata)
+      setItems(curr => curr.map((item, i) =>
+        i === existingIdx ? { ...item, quantity: 1, unit_price: newPrice } : item
+      ));
+      showMsg('success', `Taxa operacional atualizada para R$ ${fmt(newPrice)}.`);
+    } else {
+      // Cria nova taxa somente quando não existe nenhuma
+      const feeItem = { ...emptyItem, item_name: OPERATIONAL_FEE_NAME, quantity: 1, unit_price: newPrice };
+      setItems(curr => [...curr, feeItem]);
+      showMsg('success', `"Taxa operacional" de R$ ${fmt(newPrice)} adicionada.`);
+    }
   };
 
   // ── Handlers de Custos Fixos (Etapa A) ──────────────────────────────────────
