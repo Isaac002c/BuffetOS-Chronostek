@@ -396,6 +396,14 @@ if (process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL && !proce
     console.warn(' Migration warning (quotation_items sheet):', err.message);
   }
 
+  // ETAPA D2: unidade do custo por ingrediente (conversão kg/g, litro/ml)
+  try {
+    await pool.query(`ALTER TABLE sheet_ingredients ADD COLUMN IF NOT EXISTS cost_unit VARCHAR(30) DEFAULT NULL`);
+    console.log(' Migration: sheet_ingredients.cost_unit garantido');
+  } catch (err) {
+    console.warn(' Migration warning (sheet_ingredients cost_unit):', err.message);
+  }
+
   // FASE 11: sessões por dispositivo (max 2 simultâneas)
   try {
     await pool.query(`

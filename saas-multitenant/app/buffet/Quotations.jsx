@@ -632,7 +632,16 @@ const emptyForm = {
   discount_percent: 0,
 };
 
-const emptyItem = { item_name: '', quantity: 1, unit_price: 0, quantity_per_person: null, sheet_id: null, sheet_cost: 0 };
+// Markup padrão sugerido ao vincular ficha técnica (100% = preço = 2× custo).
+// Configurável por tenant no futuro via settings API.
+const DEFAULT_MARKUP = 1.0;
+
+const emptyItem = {
+  item_name: '', quantity: 1, unit_price: 0,
+  quantity_per_person: null,
+  sheet_id: null, sheet_cost: 0,
+  sheet_cost_per_unit: 0,  // armazenado só no estado, não persiste no banco
+};
 
 const emptyFixedCost    = { id: '', description: '', category: 'outros', amount: '', notes: '' };
 const emptyVariableCost = { id: '', description: '', category: 'outros', calc_type: 'total', amount: '', notes: '' };
@@ -1407,50 +1416,80 @@ function BuilderSection({ title, icon, action, children }) {
 
 function ItemRow({ item, idx, onChange, onRemove, sheets = [], onSheetChange }) {
   const [hovered, setHovered] = useState(false);
-  const subtotal   = Number(item.quantity || 0) * Number(item.unit_price || 0);
-  const sheetLinked = item.sheet_id && sheets.find(s => s.id === item.sheet_id);
+  const qty        = Number(item.quantity   || 0);
+  const unitPrice  = Number(item.unit_price || 0);
+  const subtotal   = qty * unitPrice;
+  const sheetData  = item.sheet_id ? sheets.find(s => s.id === item.sheet_id) : null;
+  const sheetCpu   = Number(item.sheet_cost_per_unit) || 0;
+  const sheetCost  = Number(item.sheet_cost) || 0;
 
   return (
-    <div className="qs-item-row" style={{ gap: 8, padding: '6px 8px', borderRadius: 10, background: hovered ? '#f8fafc' : 'transparent', transition: 'background 0.15s' }}
+    <div className="qs-item-row" style={{ gap: 0, padding: '8px', borderRadius: 10, background: hovered ? '#f8fafc' : 'transparent', transition: 'background 0.15s' }}
       onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
-      {/* Linha principal: nome, qtd, preço, subtotal, remove */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 140px 110px 36px', gap: 8, alignItems: 'center' }}>
+
+      {/* ── Linha principal ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 150px 110px 36px', gap: 8, alignItems: 'center' }}>
         <input type="text" value={item.item_name} placeholder="Descrição do item ou serviço"
           onChange={e => onChange(idx, 'item_name', e.target.value)}
           style={{ ...S.input, padding: '8px 12px', fontSize: 13 }} />
-        <input type="number" min={1} value={item.quantity}
+
+        <input type="number" min={0} step="1" value={item.quantity}
           onChange={e => onChange(idx, 'quantity', e.target.value)}
           style={{ ...S.input, padding: '8px 10px', fontSize: 13, textAlign: 'center' }} />
+
+        {/* Valor unitário de VENDA (não é custo) */}
         <div style={{ position: 'relative' }}>
-          <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: 12, pointerEvents: 'none' }}>R$</span>
+          <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: 11, pointerEvents: 'none', userSelect: 'none' }}>R$</span>
           <input type="number" min={0} step="0.01" value={item.unit_price}
             onChange={e => onChange(idx, 'unit_price', e.target.value)}
-            style={{ ...S.input, padding: '8px 10px 8px 30px', fontSize: 13 }} />
+            style={{ ...S.input, padding: '8px 8px 8px 28px', fontSize: 13 }} />
+          <div style={{ fontSize: 9, color: '#94a3b8', textAlign: 'right', marginTop: 2 }}>PREÇO VENDA/un</div>
         </div>
-        <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', padding: '8px 10px', background: '#f1f5f9', borderRadius: 8, textAlign: 'right', whiteSpace: 'nowrap' }}>
+
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', padding: '8px 8px', background: '#f1f5f9', borderRadius: 8, textAlign: 'right', whiteSpace: 'nowrap' }}>
           R$ {fmt(subtotal)}
         </div>
-        <button onClick={() => onRemove(idx)} style={{ width: 36, height: 36, borderRadius: 8, border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', flexShrink: 0 }}
+
+        <button onClick={() => onRemove(idx)} style={{ width: 36, height: 36, borderRadius: 8, border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
           onMouseEnter={e => { e.currentTarget.style.background = '#dc2626'; e.currentTarget.style.color = 'white'; }}
           onMouseLeave={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.color = '#dc2626'; }}>×</button>
       </div>
-      {/* Linha de ficha técnica — opcional */}
+
+      {/* ── Linha de ficha técnica ── */}
       {sheets.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, paddingLeft: 4 }}>
-          <span style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap' }}>🧾 Ficha técnica:</span>
-          <select style={{ ...S.input, fontSize: 11, padding: '4px 8px', maxWidth: 220 }}
-            value={item.sheet_id || ''}
-            onChange={e => onSheetChange && onSheetChange(idx, e.target.value || null)}>
-            <option value="">— sem ficha vinculada —</option>
-            {sheets.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-          {sheetLinked && (
-            <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600 }}>
-              Custo calculado: R$ {fmt(item.sheet_cost)}
-            </span>
-          )}
-          {item.sheet_id && !sheetLinked && (
-            <span style={{ fontSize: 11, color: '#f59e0b' }}>⚠ Ficha não encontrada — custo R$ 0,00</span>
+        <div style={{ marginTop: 6, paddingLeft: 2, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 10, color: '#94a3b8', whiteSpace: 'nowrap', fontWeight: 600 }}>🧾 FICHA TÉCNICA</span>
+            <select
+              style={{ ...S.input, fontSize: 11, padding: '3px 8px', maxWidth: 200, height: 26 }}
+              value={item.sheet_id || ''}
+              onChange={e => onSheetChange && onSheetChange(idx, e.target.value || null)}>
+              <option value="">— sem ficha —</option>
+              {sheets.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+
+          {/* Info de custo interno (só aparece se ficha vinculada) */}
+          {item.sheet_id && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              {sheetData ? (
+                <>
+                  <span style={{ fontSize: 11, color: '#64748b' }}>
+                    Custo/un: <strong style={{ color: '#475569' }}>R$ {fmt(sheetCpu)}</strong>
+                  </span>
+                  <span style={{ fontSize: 11, background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', borderRadius: 6, padding: '1px 8px', fontWeight: 700 }}>
+                    Custo interno: R$ {fmt(sheetCost)}
+                  </span>
+                  {unitPrice > 0 && sheetCpu > 0 && (
+                    <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                      Margem/un: {unitPrice > sheetCpu ? '+' : ''}R$ {fmt(unitPrice - sheetCpu)}
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 600 }}>⚠ Ficha não carregada — custo R$ 0,00</span>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -2287,35 +2326,47 @@ export default function BuffetQuotations() {
 
   const handleFieldChange = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }));
-    // Ao mudar nº de convidados, rescala automaticamente itens de template
+
     if (field === 'guest_count') {
       const guests = Number(value) || 0;
-      if (guests > 0) {
-        setItems(curr => curr.map(item => {
+      setItems(curr => curr.map(item => {
+        // Itens com ficha técnica: recalcula sheet_cost e atualiza quantidade pelo nº de convidados
+        if (item.sheet_id) {
+          const cpu  = Number(item.sheet_cost_per_unit) || 0;
+          const qty  = guests > 0 ? guests : item.quantity;
+          return { ...item, quantity: qty, sheet_cost: cpu * qty };
+        }
+        // Itens de template com quantity_per_person: rescala normalmente
+        if (guests > 0) {
           const qpp = item.quantity_per_person;
           if (qpp != null && qpp > 0) {
-            // arredonda para evitar frações — mínimo 1 unidade
+            // Arredonda para 2 casas decimais, mínimo 1
             const scaled = Math.max(1, Math.round(qpp * guests * 100) / 100);
             return { ...item, quantity: scaled };
           }
-          return item;
-        }));
-      }
+        }
+        return item;
+      }));
     }
   };
 
   const handleItemChange = (idx, field, value) =>
     setItems(curr =>
-      curr.map((item, i) =>
-        i === idx
-          ? {
-              ...item,
-              [field]: field === 'quantity' || field === 'unit_price' ? Number(value) : value,
-              // Se o usuário edita a quantidade manualmente, para de auto-escalar esse item
-              ...(field === 'quantity' ? { quantity_per_person: null } : {}),
-            }
-          : item
-      )
+      curr.map((item, i) => {
+        if (i !== idx) return item;
+        const numValue = (field === 'quantity' || field === 'unit_price') ? Number(value) : value;
+        const updated = {
+          ...item,
+          [field]: numValue,
+          // Edição manual de quantidade desativa auto-rescale para esse item
+          ...(field === 'quantity' ? { quantity_per_person: null } : {}),
+        };
+        // Se quantidade mudou e o item tem ficha, recalcula custo proporcional
+        if (field === 'quantity' && updated.sheet_id && updated.sheet_cost_per_unit > 0) {
+          updated.sheet_cost = updated.sheet_cost_per_unit * (Number(value) || 0);
+        }
+        return updated;
+      })
     );
 
   const handleAddItem = () => setItems(curr => [...curr, { ...emptyItem }]);
@@ -2323,16 +2374,55 @@ export default function BuffetQuotations() {
 
   // ── Handlers de Ficha Técnica nos itens (Etapa D) ───────────────────────────
   const handleItemSheetChange = async (idx, sheetId) => {
-    const guests = Number(form.guest_count) || 0;
+    // Remover ficha
     if (!sheetId) {
-      setItems(curr => curr.map((item, i) => i === idx ? { ...item, sheet_id: null, sheet_cost: 0 } : item));
+      setItems(curr => curr.map((item, i) =>
+        i === idx
+          ? { ...item, sheet_id: null, sheet_cost: 0, sheet_cost_per_unit: 0 }
+          : item
+      ));
       return;
     }
+
+    const guests = Number(form.guest_count) || 0;
     try {
-      const data = await getSheetCost(sheetId, guests);
-      setItems(curr => curr.map((item, i) => i === idx ? { ...item, sheet_id: sheetId, sheet_cost: Number(data?.scaled_cost) || 0 } : item));
+      // Usa 1 como fallback quando convidados ainda não preenchidos
+      const qtyForCost = guests > 0 ? guests : 1;
+      const data = await getSheetCost(sheetId, qtyForCost);
+
+      const costPerUnit    = Number(data?.cost_per_unit)  || 0;
+      const sheetName      = data?.sheet_name             || '';
+      const baseYield      = Number(data?.base_yield)     || 1;
+
+      // Quantidade = nº de convidados (ou rendimento base como sugestão)
+      const qty = guests > 0 ? guests : baseYield;
+      const sheetCost = costPerUnit * qty;
+
+      // Preço sugerido = custo × (1 + markup). Só preenche se item ainda sem preço.
+      const suggestedPrice = costPerUnit * (1 + DEFAULT_MARKUP);
+
+      setItems(curr => curr.map((item, i) => {
+        if (i !== idx) return item;
+        return {
+          ...item,
+          sheet_id:           sheetId,
+          sheet_cost_per_unit: costPerUnit,
+          sheet_cost:          sheetCost,
+          quantity:            qty,
+          quantity_per_person: null, // impede que o rescale de template interfira
+          // Preenche nome só se vazio
+          item_name: item.item_name?.trim() ? item.item_name : sheetName,
+          // Preenche preço de venda sugerido só se zero ou vazio
+          unit_price: (Number(item.unit_price) > 0) ? item.unit_price : suggestedPrice,
+        };
+      }));
     } catch {
-      setItems(curr => curr.map((item, i) => i === idx ? { ...item, sheet_id: sheetId, sheet_cost: 0 } : item));
+      // Fallback silencioso: vincula a ficha mas sem custo calculado
+      setItems(curr => curr.map((item, i) =>
+        i === idx
+          ? { ...item, sheet_id: sheetId, sheet_cost: 0, sheet_cost_per_unit: 0, quantity_per_person: null }
+          : item
+      ));
     }
   };
 
@@ -2418,14 +2508,20 @@ export default function BuffetQuotations() {
     // igual ao comportamento ao criar pelo template.
     const originalGuests = Number(full.guest_count) || 0;
     const loadedItems = (full.items || []).map(i => {
-      const qty = Number(i.quantity) || 1;
+      const qty       = Number(i.quantity)   || 1;
+      const sheetCost = Number(i.sheet_cost) || 0;
+      const hasSheet  = !!i.sheet_id;
+      // Deriva custo por unidade: sheet_cost / quantity (retrocompat com dados antigos)
+      const sheetCpu  = hasSheet && qty > 0 ? sheetCost / qty : 0;
       return {
-        item_name:  i.item_name  || '',
-        quantity:   qty,
-        unit_price: Number(i.unit_price) || 0,
-        quantity_per_person: originalGuests > 0 ? qty / originalGuests : null,
-        sheet_id:   i.sheet_id   || null,
-        sheet_cost: Number(i.sheet_cost) || 0,
+        item_name:          i.item_name   || '',
+        quantity:           qty,
+        unit_price:         Number(i.unit_price) || 0,
+        // Itens com ficha não devem ser auto-rescalados pela lógica de template
+        quantity_per_person: hasSheet ? null : (originalGuests > 0 ? qty / originalGuests : null),
+        sheet_id:            i.sheet_id   || null,
+        sheet_cost:          sheetCost,
+        sheet_cost_per_unit: sheetCpu,
       };
     });
     setItems(loadedItems.length > 0 ? loadedItems : [{ ...emptyItem }]);
@@ -2456,9 +2552,12 @@ export default function BuffetQuotations() {
         fixed_costs:      cleanFixed,
         variable_costs:   cleanVariable,
         items: items.map(i => ({
-          ...i,
+          item_name:  i.item_name  || '',
+          quantity:   Number(i.quantity)   || 0,
+          unit_price: Number(i.unit_price) || 0,
           sheet_id:   i.sheet_id   || null,
           sheet_cost: Number(i.sheet_cost) || 0,
+          // sheet_cost_per_unit e quantity_per_person são estado-only, não vão ao banco
         })),
         client_id: null,
         lead_id:   form.lead_id || null,
