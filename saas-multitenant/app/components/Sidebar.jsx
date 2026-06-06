@@ -52,6 +52,12 @@ const icons = {
       <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
     </svg>
   ),
+  sheets: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 11l3 3L22 4" />
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+    </svg>
+  ),
 };
 
 // ─── NAV ITEMS ────────────────────────────────────────────────────────────────
@@ -60,9 +66,10 @@ const navItems = [
   { key: 'dashboard',   label: 'Dashboard',  href: '/dashboard?module=buffet&tab=dashboard',   icon: 'dashboard' },
   { key: 'leads',       label: 'Leads',      href: '/dashboard?module=buffet&tab=leads',        icon: 'leads' },
   { key: 'events',      label: 'Calendário', href: '/dashboard?module=buffet&tab=events',       icon: 'events' },
-  { key: 'quotations', label: 'Orçamentos', href: '/dashboard?module=buffet&tab=quotations', icon: 'quotations' },
-  { key: 'billing',    label: 'Financeiro', href: '/dashboard?module=buffet&tab=billing',    icon: 'billing'    },
-  { key: 'team',       label: 'Equipe',     href: '/dashboard?module=buffet&tab=team',       icon: 'team'       },
+  { key: 'quotations', label: 'Orçamentos',    href: '/dashboard?module=buffet&tab=quotations', icon: 'quotations' },
+  { key: 'sheets',     label: 'Ficha Técnica', href: '/dashboard?module=buffet&tab=sheets',     icon: 'sheets'     },
+  { key: 'billing',    label: 'Financeiro',    href: '/dashboard?module=buffet&tab=billing',    icon: 'billing'    },
+  { key: 'team',       label: 'Equipe',        href: '/dashboard?module=buffet&tab=team',       icon: 'team'       },
 ];
 
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────

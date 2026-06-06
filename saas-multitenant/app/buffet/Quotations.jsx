@@ -20,6 +20,12 @@ import {
   getTemplates, getTemplate, createTemplate, updateTemplate, deleteTemplate,
   addTemplateItem, updateTemplateItem, deleteTemplateItem,
 } from '../lib/templatesAPI.js';
+import { apiRequest } from '../lib/api';
+
+// API de fichas técnicas (Etapa C/D)
+const getAllSheets = () => apiRequest('/api/technical-sheets').then(r => r.data || []);
+const getSheetCost = (sheetId, guests) =>
+  apiRequest(`/api/technical-sheets/${sheetId}/cost?guests=${guests}`).then(r => r.data);
 
 // ─── COMPANY CONFIG (altere aqui com os dados da sua empresa) ────────────────
 
@@ -626,7 +632,16 @@ const emptyForm = {
   discount_percent: 0,
 };
 
-const emptyItem = { item_name: '', quantity: 1, unit_price: 0, quantity_per_person: null };
+const emptyItem = { item_name: '', quantity: 1, unit_price: 0, quantity_per_person: null, sheet_id: null, sheet_cost: 0 };
+
+const emptyFixedCost    = { id: '', description: '', category: 'outros', amount: '', notes: '' };
+const emptyVariableCost = { id: '', description: '', category: 'outros', calc_type: 'total', amount: '', notes: '' };
+
+const FIXED_COST_CATEGORIES    = ['logística','equipe','aluguel','taxas','embalagem','outros'];
+const VARIABLE_COST_CATEGORIES = ['descartável','bebida','comissão','operacional','outros'];
+
+// Limites de alerta de margem (futuramente configurável por tenant via API)
+const MARGIN_THRESHOLDS = { warning: 25, danger: 15 };
 
 // ─── UTILS ────────────────────────────────────────────────────────────────────
 
@@ -1390,182 +1405,256 @@ function BuilderSection({ title, icon, action, children }) {
 
 // ─── ITEM ROW ─────────────────────────────────────────────────────────────────
 
-function ItemRow({ item, idx, onChange, onRemove }) {
+function ItemRow({ item, idx, onChange, onRemove, sheets = [], onSheetChange }) {
   const [hovered, setHovered] = useState(false);
-  const subtotal = Number(item.quantity || 0) * Number(item.unit_price || 0);
+  const subtotal   = Number(item.quantity || 0) * Number(item.unit_price || 0);
+  const sheetLinked = item.sheet_id && sheets.find(s => s.id === item.sheet_id);
 
   return (
-    <div className="qs-item-row" style={{
-      display: 'grid',
-      gridTemplateColumns: '1fr 90px 140px 110px 36px',
-      gap: 8,
-      alignItems: 'center',
-      padding: '6px 8px',
-      borderRadius: 10,
-      background: hovered ? '#f8fafc' : 'transparent',
-      transition: 'background 0.15s',
-    }}
-    onMouseEnter={() => setHovered(true)}
-    onMouseLeave={() => setHovered(false)}>
-      <input
-        type="text"
-        value={item.item_name}
-        placeholder="Descrição do item ou serviço"
-        onChange={e => onChange(idx, 'item_name', e.target.value)}
-        style={{ ...S.input, padding: '8px 12px', fontSize: 13 }}
-      />
-      <input
-        type="number" min={1}
-        value={item.quantity}
-        onChange={e => onChange(idx, 'quantity', e.target.value)}
-        style={{ ...S.input, padding: '8px 10px', fontSize: 13, textAlign: 'center' }}
-      />
-      <div style={{ position: 'relative' }}>
-        <span style={{
-          position: 'absolute', left: 10, top: '50%',
-          transform: 'translateY(-50%)', color: '#94a3b8', fontSize: 12, pointerEvents: 'none',
-        }}>R$</span>
-        <input
-          type="number" min={0} step="0.01"
-          value={item.unit_price}
-          onChange={e => onChange(idx, 'unit_price', e.target.value)}
-          style={{ ...S.input, padding: '8px 10px 8px 30px', fontSize: 13 }}
-        />
+    <div className="qs-item-row" style={{ gap: 8, padding: '6px 8px', borderRadius: 10, background: hovered ? '#f8fafc' : 'transparent', transition: 'background 0.15s' }}
+      onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+      {/* Linha principal: nome, qtd, preço, subtotal, remove */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 140px 110px 36px', gap: 8, alignItems: 'center' }}>
+        <input type="text" value={item.item_name} placeholder="Descrição do item ou serviço"
+          onChange={e => onChange(idx, 'item_name', e.target.value)}
+          style={{ ...S.input, padding: '8px 12px', fontSize: 13 }} />
+        <input type="number" min={1} value={item.quantity}
+          onChange={e => onChange(idx, 'quantity', e.target.value)}
+          style={{ ...S.input, padding: '8px 10px', fontSize: 13, textAlign: 'center' }} />
+        <div style={{ position: 'relative' }}>
+          <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: 12, pointerEvents: 'none' }}>R$</span>
+          <input type="number" min={0} step="0.01" value={item.unit_price}
+            onChange={e => onChange(idx, 'unit_price', e.target.value)}
+            style={{ ...S.input, padding: '8px 10px 8px 30px', fontSize: 13 }} />
+        </div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', padding: '8px 10px', background: '#f1f5f9', borderRadius: 8, textAlign: 'right', whiteSpace: 'nowrap' }}>
+          R$ {fmt(subtotal)}
+        </div>
+        <button onClick={() => onRemove(idx)} style={{ width: 36, height: 36, borderRadius: 8, border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', flexShrink: 0 }}
+          onMouseEnter={e => { e.currentTarget.style.background = '#dc2626'; e.currentTarget.style.color = 'white'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.color = '#dc2626'; }}>×</button>
       </div>
-      <div style={{
-        fontSize: 13, fontWeight: 700, color: '#1e293b',
-        padding: '8px 10px', background: '#f1f5f9', borderRadius: 8,
-        textAlign: 'right', whiteSpace: 'nowrap',
-      }}>
-        R$ {fmt(subtotal)}
-      </div>
-      <button onClick={() => onRemove(idx)} style={{
-        width: 36, height: 36, borderRadius: 8,
-        border: '1px solid #fecaca', background: '#fef2f2',
-        color: '#dc2626', cursor: 'pointer', fontSize: 16,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        transition: 'all 0.2s', flexShrink: 0,
-      }}
-      onMouseEnter={e => { e.currentTarget.style.background = '#dc2626'; e.currentTarget.style.color = 'white'; }}
-      onMouseLeave={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.color = '#dc2626'; }}>
-        ×
-      </button>
+      {/* Linha de ficha técnica — opcional */}
+      {sheets.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, paddingLeft: 4 }}>
+          <span style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap' }}>🧾 Ficha técnica:</span>
+          <select style={{ ...S.input, fontSize: 11, padding: '4px 8px', maxWidth: 220 }}
+            value={item.sheet_id || ''}
+            onChange={e => onSheetChange && onSheetChange(idx, e.target.value || null)}>
+            <option value="">— sem ficha vinculada —</option>
+            {sheets.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+          {sheetLinked && (
+            <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600 }}>
+              Custo calculado: R$ {fmt(item.sheet_cost)}
+            </span>
+          )}
+          {item.sheet_id && !sheetLinked && (
+            <span style={{ fontSize: 11, color: '#f59e0b' }}>⚠ Ficha não encontrada — custo R$ 0,00</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-// ─── FINANCIAL SIDEBAR ────────────────────────────────────────────────────────
+// ─── FIXED COSTS SECTION ──────────────────────────────────────────────────────
+
+function FixedCostsSection({ fixedCosts, onAdd, onChange, onRemove }) {
+  const total = fixedCosts.reduce((s, c) => s + (Number(c.amount) || 0), 0);
+  return (
+    <BuilderSection title="Custos Fixos da Festa" icon="🔩"
+      action={
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {total > 0 && <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>Total: <strong style={{ color: '#0f172a' }}>R$ {fmt(total)}</strong></span>}
+          <button onClick={onAdd} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>+ Adicionar custo fixo</button>
+        </div>
+      }
+    >
+      {fixedCosts.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '16px', color: '#94a3b8', fontSize: 13 }}>
+          Nenhum custo fixo adicionado. Exemplos: frete, equipe, gás, aluguel de material.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {fixedCosts.map((c, idx) => (
+            <div key={idx} style={{ display: 'grid', gridTemplateColumns: '2fr 140px 100px 1fr 32px', gap: 8, alignItems: 'center' }}>
+              <input style={S.input} placeholder="Descrição (ex: Frete)" value={c.description} onChange={e => onChange(idx, 'description', e.target.value)} />
+              <select style={S.input} value={c.category} onChange={e => onChange(idx, 'category', e.target.value)}>
+                {FIXED_COST_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>)}
+              </select>
+              <input style={{ ...S.input, textAlign: 'right' }} type="number" min="0" step="0.01" placeholder="R$ 0,00" value={c.amount} onChange={e => onChange(idx, 'amount', e.target.value)} />
+              <input style={S.input} placeholder="Observação (opcional)" value={c.notes} onChange={e => onChange(idx, 'notes', e.target.value)} />
+              <button onClick={() => onRemove(idx)} style={{ background: '#fee2e2', border: 'none', borderRadius: 6, width: 28, height: 28, cursor: 'pointer', color: '#dc2626', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </BuilderSection>
+  );
+}
+
+// ─── VARIABLE COSTS SECTION ───────────────────────────────────────────────────
+
+function VariableCostsSection({ variableCosts, guestCount, onAdd, onChange, onRemove }) {
+  const guests = Number(guestCount) || 0;
+  const total  = variableCosts.reduce((s, c) => {
+    const amt = Number(c.amount) || 0;
+    return s + (c.calc_type === 'per_person' ? amt * guests : amt);
+  }, 0);
+  return (
+    <BuilderSection title="Custos Variáveis" icon="📊"
+      action={
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {total > 0 && <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>Total: <strong style={{ color: '#0f172a' }}>R$ {fmt(total)}</strong></span>}
+          <button onClick={onAdd} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>+ Adicionar custo variável</button>
+        </div>
+      }
+    >
+      {variableCosts.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '16px', color: '#94a3b8', fontSize: 13 }}>
+          Nenhum custo variável adicionado. Exemplos: descartável por pessoa, bebida por convidado.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {variableCosts.map((c, idx) => {
+            const lineTotal = c.calc_type === 'per_person' ? (Number(c.amount) || 0) * guests : (Number(c.amount) || 0);
+            return (
+              <div key={idx} style={{ display: 'grid', gridTemplateColumns: '2fr 140px 140px 100px 1fr 80px 32px', gap: 8, alignItems: 'center' }}>
+                <input style={S.input} placeholder="Descrição" value={c.description} onChange={e => onChange(idx, 'description', e.target.value)} />
+                <select style={S.input} value={c.category} onChange={e => onChange(idx, 'category', e.target.value)}>
+                  {VARIABLE_COST_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>)}
+                </select>
+                <select style={S.input} value={c.calc_type} onChange={e => onChange(idx, 'calc_type', e.target.value)}>
+                  <option value="per_person">Por pessoa</option>
+                  <option value="total">Valor total</option>
+                </select>
+                <input style={{ ...S.input, textAlign: 'right' }} type="number" min="0" step="0.01" placeholder="R$ 0,00" value={c.amount} onChange={e => onChange(idx, 'amount', e.target.value)} />
+                <input style={S.input} placeholder="Observação (opcional)" value={c.notes} onChange={e => onChange(idx, 'notes', e.target.value)} />
+                <div style={{ fontSize: 12, color: '#475569', fontWeight: 600, textAlign: 'right' }}>R$ {fmt(lineTotal)}</div>
+                <button onClick={() => onRemove(idx)} style={{ background: '#fee2e2', border: 'none', borderRadius: 6, width: 28, height: 28, cursor: 'pointer', color: '#dc2626', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </BuilderSection>
+  );
+}
+
+// ─── FINANCIAL SIDEBAR (Etapa E — resumo financeiro melhorado) ────────────────
 
 function FinRow({ label, value, bold, muted, valueColor }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <span style={{ fontSize: 13, color: muted ? '#94a3b8' : '#64748b' }}>{label}</span>
-      <span style={{
-        fontSize: bold ? 15 : 13,
-        fontWeight: bold ? 700 : 500,
-        color: valueColor || (bold ? '#0f172a' : '#334155'),
-      }}>{value}</span>
+      <span style={{ fontSize: 12, color: muted ? '#94a3b8' : '#64748b', fontWeight: bold ? 600 : 400 }}>{label}</span>
+      <span style={{ fontSize: 12, color: valueColor || (bold ? '#0f172a' : '#475569'), fontWeight: bold ? 700 : 500 }}>{value}</span>
     </div>
   );
 }
 
+function SectionLabel({ label }) {
+  return (
+    <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6, marginTop: 4 }}>{label}</div>
+  );
+}
+
 function FinancialSidebar({
-  subtotal, discountPct, discountAmt, total,
-  guestCount, costPerPerson, profit, marginPct,
+  fin,
+  guestCount,
   onSave, loading, editingQuotation, status, onApprove, onCancel, onConvertToEvent,
 }) {
+  const { subtotal, discountAmt, receita, precoVendaPessoa,
+          custoFichas, custoVariavel, custoFixo, custoTotal, custoPessoa,
+          lucro, margemPct, lucroPessoa, margemAlerta } = fin;
+
+  const hasCosts = custoTotal > 0;
+
+  const alertStyle = margemAlerta === 'danger'
+    ? { background: '#fee2e2', border: '1px solid #fca5a5', color: '#991b1b' }
+    : { background: '#fefce8', border: '1px solid #fde047', color: '#854d0e' };
+
   return (
     <div style={{ ...S.card, boxShadow: '0 4px 24px rgba(0,0,0,0.07)' }}>
-      <div style={{
-        padding: '18px 20px', borderBottom: '1px solid #f1f5f9',
-        display: 'flex', alignItems: 'center', gap: 10,
-      }}>
-        <span style={{ fontSize: 18 }}>💰</span>
-        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#0f172a' }}>Resumo Financeiro</h3>
+      <div style={{ padding: '16px 18px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 16 }}>💰</span>
+        <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#0f172a' }}>Resumo Financeiro</h3>
       </div>
 
-      <div style={{ padding: '18px 20px' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
-          <FinRow label="Subtotal" value={`R$ ${fmt(subtotal)}`} />
-          {discountPct > 0 && (
-            <FinRow
-              label={`Desconto (${discountPct}%)`}
-              value={`−R$ ${fmt(discountAmt)}`}
-              valueColor="#dc2626"
-            />
-          )}
-          <div style={{ height: 1, background: '#f1f5f9' }} />
-          <FinRow label="Total" value={`R$ ${fmt(total)}`} bold />
-          {guestCount > 0 && (
-            <FinRow label="Custo / Pessoa" value={`R$ ${fmt(costPerPerson)}`} muted />
-          )}
-          <div style={{ height: 1, background: '#f1f5f9' }} />
-          <FinRow
-            label={`Margem estimada (${marginPct}%)`}
-            value={`R$ ${fmt(profit)}`}
-            valueColor="#16a34a"
-            bold
-          />
+      <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+        {/* ── RECEITA ── */}
+        <div>
+          <SectionLabel label="Receita" />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <FinRow label="Subtotal da proposta" value={`R$ ${fmt(subtotal)}`} />
+            {discountAmt > 0 && <FinRow label="Desconto" value={`−R$ ${fmt(discountAmt)}`} valueColor="#dc2626" />}
+            <FinRow label="Receita líquida" value={`R$ ${fmt(receita)}`} bold />
+            {guestCount > 0 && <FinRow label="Preço por pessoa" value={`R$ ${fmt(precoVendaPessoa)}`} muted />}
+          </div>
         </div>
 
-        {/* Total highlight */}
-        <div style={{
-          margin: '18px 0 0',
-          background: 'linear-gradient(135deg, #eff6ff, #dbeafe)',
-          borderRadius: 14, padding: '16px 18px',
-          border: '1px solid #bfdbfe',
-        }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
-            Valor total da proposta
+        <div style={{ height: 1, background: '#f1f5f9' }} />
+
+        {/* ── CUSTOS ── */}
+        <div>
+          <SectionLabel label="Custos Internos" />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {custoFichas > 0 && <FinRow label="Fichas técnicas" value={`R$ ${fmt(custoFichas)}`} />}
+            {custoVariavel > 0 && <FinRow label="Custos variáveis" value={`R$ ${fmt(custoVariavel)}`} />}
+            {custoFixo > 0 && <FinRow label="Custos fixos" value={`R$ ${fmt(custoFixo)}`} />}
+            {hasCosts
+              ? <FinRow label="Custo total da festa" value={`R$ ${fmt(custoTotal)}`} bold />
+              : <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Nenhum custo interno registrado</div>
+            }
+            {hasCosts && guestCount > 0 && <FinRow label="Custo por pessoa" value={`R$ ${fmt(custoPessoa)}`} muted />}
           </div>
-          <div style={{ fontSize: 26, fontWeight: 700, color: '#1e40af', lineHeight: 1 }}>
-            R$ {fmt(total)}
-          </div>
-          {guestCount > 0 && (
-            <div style={{ fontSize: 12, color: '#3b82f6', marginTop: 6 }}>
-              R$ {fmt(costPerPerson)} por pessoa · {guestCount} convidados
+        </div>
+
+        <div style={{ height: 1, background: '#f1f5f9' }} />
+
+        {/* ── RESULTADO ── */}
+        {hasCosts && (
+          <div>
+            <SectionLabel label="Resultado" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <FinRow label="Lucro estimado" value={`R$ ${fmt(lucro)}`} bold valueColor={lucro >= 0 ? '#16a34a' : '#dc2626'} />
+              <FinRow label="Margem" value={`${margemPct.toFixed(1)}%`} bold valueColor={lucro >= 0 ? '#16a34a' : '#dc2626'} />
+              {guestCount > 0 && <FinRow label="Lucro por pessoa" value={`R$ ${fmt(lucroPessoa)}`} muted />}
             </div>
+          </div>
+        )}
+
+        {/* Alerta de margem */}
+        {margemAlerta && (
+          <div style={{ ...alertStyle, borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 600 }}>
+            {margemAlerta === 'danger' ? '🔴 Margem crítica' : '🟡 Margem baixa'} ({margemPct.toFixed(1)}%)
+            — revise os custos ou o valor da proposta.
+          </div>
+        )}
+
+        {/* Valor total destacado */}
+        <div style={{ background: 'linear-gradient(135deg,#eff6ff,#dbeafe)', borderRadius: 12, padding: '14px 16px', border: '1px solid #bfdbfe' }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Valor total da proposta</div>
+          <div style={{ fontSize: 24, fontWeight: 700, color: '#1e40af', lineHeight: 1 }}>R$ {fmt(receita)}</div>
+          {guestCount > 0 && (
+            <div style={{ fontSize: 11, color: '#3b82f6', marginTop: 4 }}>R$ {fmt(precoVendaPessoa)} / pessoa · {guestCount} convidados</div>
           )}
         </div>
 
-        {/* Actions */}
-        <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 9 }}>
-          <button onClick={onSave} disabled={loading} style={{
-            width: '100%', padding: '12px', borderRadius: 12, border: 'none',
-            background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
-            color: 'white', fontSize: 14, fontWeight: 700,
-            cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1,
-            transition: 'all 0.2s',
-          }}>
+        {/* Ações */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <button onClick={onSave} disabled={loading} style={{ width: '100%', padding: '11px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#3b82f6,#2563eb)', color: 'white', fontSize: 13, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
             {loading ? 'Salvando...' : editingQuotation ? '💾 Salvar alterações' : '✓ Criar orçamento'}
           </button>
-
           {editingQuotation && status !== 'approved' && status !== 'cancelled' && (
-            <button onClick={onApprove} style={{
-              width: '100%', padding: '12px', borderRadius: 12, border: 'none',
-              background: '#dcfce7', color: '#16a34a', fontSize: 14, fontWeight: 700, cursor: 'pointer',
-            }}>
-              ✓ Aprovar proposta
-            </button>
+            <button onClick={onApprove} style={{ width: '100%', padding: '11px', borderRadius: 10, border: 'none', background: '#dcfce7', color: '#16a34a', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>✓ Aprovar proposta</button>
           )}
-
           {editingQuotation && status !== 'cancelled' && (
-            <button onClick={onCancel} style={{
-              width: '100%', padding: '12px', borderRadius: 12, border: '1px solid #fed7aa',
-              background: '#fff7ed', color: '#ea580c', fontSize: 14, fontWeight: 700, cursor: 'pointer',
-            }}>
-              ✕ Cancelar orçamento
-            </button>
+            <button onClick={onCancel} style={{ width: '100%', padding: '11px', borderRadius: 10, border: '1px solid #fed7aa', background: '#fff7ed', color: '#ea580c', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>✕ Cancelar orçamento</button>
           )}
-
           {editingQuotation && status === 'approved' && onConvertToEvent && (
-            <button onClick={onConvertToEvent} style={{
-              width: '100%', padding: '12px', borderRadius: 12, border: 'none',
-              background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
-              color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer',
-            }}>
-              📅 Converter em Evento
-            </button>
+            <button onClick={onConvertToEvent} style={{ width: '100%', padding: '11px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#7c3aed,#6d28d9)', color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>📅 Converter em Evento</button>
           )}
         </div>
       </div>
@@ -1577,28 +1666,55 @@ function FinancialSidebar({
 
 function QuotationBuilder({
   form, items, clients, leads, editingQuotation, loading,
+  fixedCosts, variableCosts, sheets,
   onFieldChange, onItemChange, onAddItem, onRemoveItem,
+  onFixedCostAdd, onFixedCostChange, onFixedCostRemove,
+  onVariableCostAdd, onVariableCostChange, onVariableCostRemove,
+  onItemSheetChange,
   onAddBlock, onSubmit, onBack, onApprove, onCancel, onChangeTemplate, onConvertToEvent,
 }) {
   const [showBlocks, setShowBlocks] = useState(false);
 
-  const subtotal = items.reduce((s, i) => s + Number(i.quantity || 0) * Number(i.unit_price || 0), 0);
-  const discountAmt = subtotal * (Number(form.discount_percent || 0) / 100);
-  const total = subtotal - discountAmt;
-  const costPerPerson = form.guest_count > 0 ? total / form.guest_count : 0;
-  const marginPct = 35;
-  const profit = total * (marginPct / 100);
+  // Cálculo financeiro centralizado via helper (Etapa E)
+  const guestCount = Number(form.guest_count) || 0;
+  const fin = {
+    subtotal:        items.reduce((s, i) => s + (Number(i.quantity) || 0) * (Number(i.unit_price) || 0), 0),
+    discountAmt:     0,
+    receita:         0,
+    precoVendaPessoa: 0,
+    custoFichas:     items.reduce((s, i) => s + (Number(i.sheet_cost) || 0), 0),
+    custoVariavel:   variableCosts.reduce((s, c) => { const a = Number(c.amount) || 0; return s + (c.calc_type === 'per_person' ? a * guestCount : a); }, 0),
+    custoFixo:       fixedCosts.reduce((s, c) => s + (Number(c.amount) || 0), 0),
+    custoTotal:      0,
+    custoPessoa:     0,
+    lucro:           0,
+    margemPct:       0,
+    lucroPessoa:     0,
+    margemAlerta:    null,
+  };
+  fin.discountAmt       = fin.subtotal * ((Number(form.discount_percent) || 0) / 100);
+  fin.receita           = fin.subtotal - fin.discountAmt;
+  fin.precoVendaPessoa  = guestCount > 0 ? fin.receita / guestCount : 0;
+  fin.custoTotal        = fin.custoFichas + fin.custoVariavel + fin.custoFixo;
+  fin.custoPessoa       = guestCount > 0 ? fin.custoTotal / guestCount : 0;
+  fin.lucro             = fin.receita - fin.custoTotal;
+  fin.margemPct         = fin.receita > 0 ? (fin.lucro / fin.receita) * 100 : 0;
+  fin.lucroPessoa       = guestCount > 0 ? fin.lucro / guestCount : 0;
+  if (fin.receita > 0 && fin.custoTotal > 0) {
+    if (fin.margemPct < MARGIN_THRESHOLDS.danger)        fin.margemAlerta = 'danger';
+    else if (fin.margemPct < MARGIN_THRESHOLDS.warning)  fin.margemAlerta = 'warning';
+  }
 
   const contactName =
     leads.find(l => String(l.id) === String(form.lead_id))?.name || 'Selecione o lead';
 
   const heroMetrics = [
-    { label: 'Valor Total',   value: `R$ ${fmt(total)}`,                        icon: '💰', color: '#2563eb' },
-    { label: 'Lucro Est.',    value: `R$ ${fmt(profit)}`,                       icon: '📈', color: '#16a34a' },
-    { label: 'Convidados',    value: form.guest_count > 0 ? form.guest_count : '—', icon: '👥', color: '#7c3aed' },
+    { label: 'Valor Total',   value: `R$ ${fmt(fin.receita)}`,                                           icon: '💰', color: '#2563eb' },
+    { label: 'Lucro Est.',    value: fin.custoTotal > 0 ? `R$ ${fmt(fin.lucro)}` : '—',                  icon: '📈', color: fin.lucro >= 0 ? '#16a34a' : '#dc2626' },
+    { label: 'Convidados',    value: guestCount > 0 ? guestCount : '—',                                  icon: '👥', color: '#7c3aed' },
     { label: 'Data',          value: form.event_date ? new Date(form.event_date + 'T00:00').toLocaleDateString('pt-BR') : '—', icon: '📅', color: '#f59e0b' },
-    { label: 'Custo/Pessoa',  value: form.guest_count > 0 ? `R$ ${fmt(costPerPerson)}` : '—', icon: '🧮', color: '#06b6d4' },
-    { label: 'Margem',        value: `${marginPct}%`,                          icon: '📊', color: '#f43f5e' },
+    { label: 'Custo/Pessoa',  value: fin.custoTotal > 0 && guestCount > 0 ? `R$ ${fmt(fin.custoPessoa)}` : '—', icon: '🧮', color: '#06b6d4' },
+    { label: 'Margem',        value: fin.custoTotal > 0 ? `${fin.margemPct.toFixed(1)}%` : '—',          icon: '📊', color: fin.margemPct >= 25 ? '#16a34a' : fin.margemPct >= 15 ? '#f59e0b' : '#dc2626' },
   ];
 
   return (
@@ -1800,7 +1916,7 @@ function QuotationBuilder({
 
             <div className="qs-items-rows" style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               {items.map((item, idx) => (
-                <ItemRow key={idx} item={item} idx={idx} onChange={onItemChange} onRemove={onRemoveItem} />
+                <ItemRow key={idx} item={item} idx={idx} onChange={onItemChange} onRemove={onRemoveItem} sheets={sheets} onSheetChange={onItemSheetChange} />
               ))}
             </div>
             </div>{/* fim qs-items-section */}
@@ -1818,7 +1934,24 @@ function QuotationBuilder({
             </button>
           </BuilderSection>
 
-          {/* Financeiro */}
+          {/* Custos Variáveis (Etapa B) */}
+          <VariableCostsSection
+            variableCosts={variableCosts}
+            guestCount={form.guest_count}
+            onAdd={onVariableCostAdd}
+            onChange={onVariableCostChange}
+            onRemove={onVariableCostRemove}
+          />
+
+          {/* Custos Fixos (Etapa A) */}
+          <FixedCostsSection
+            fixedCosts={fixedCosts}
+            onAdd={onFixedCostAdd}
+            onChange={onFixedCostChange}
+            onRemove={onFixedCostRemove}
+          />
+
+          {/* Configurações Financeiras */}
           <BuilderSection title="Configurações Financeiras" icon="💳">
             <div className="qs-form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <div>
@@ -1845,17 +1978,11 @@ function QuotationBuilder({
         </div>
 
         {/* Right: Sticky Sidebar */}
-        <div className="builder-sidebar" style={{ width: 310, flexShrink: 0 }}>
+        <div className="builder-sidebar" style={{ width: 320, flexShrink: 0 }}>
           <div style={{ position: 'sticky', top: 80 }}>
             <FinancialSidebar
-              subtotal={subtotal}
-              discountPct={form.discount_percent}
-              discountAmt={discountAmt}
-              total={total}
+              fin={fin}
               guestCount={form.guest_count}
-              costPerPerson={costPerPerson}
-              profit={profit}
-              marginPct={marginPct}
               onSave={onSubmit}
               loading={loading}
               editingQuotation={editingQuotation}
@@ -2118,6 +2245,9 @@ export default function BuffetQuotations() {
   const [message, setMessage] = useState(null);
   const [form, setForm] = useState({ ...emptyForm });
   const [items, setItems] = useState([{ ...emptyItem }]);
+  const [fixedCosts,    setFixedCosts]    = useState([]);
+  const [variableCosts, setVariableCosts] = useState([]);
+  const [sheets,        setSheets]        = useState([]);
   const [filters, setFilters] = useState({ client: '', status: '' });
   // PDF template da Valéria: path para /pdf-templates/*.pdf, ou null
   const [activePdfTemplate, setActivePdfTemplate] = useState(null);
@@ -2132,11 +2262,11 @@ export default function BuffetQuotations() {
 
   useEffect(() => {
     loadData();
-    // Tenta enriquecer com dados frescos da API (phone, cnpj, address)
-    // Se a API falhar (ex: backend não reiniciado), usa o que já está no estado
     getTenantProfile()
       .then(t => { if (t?.name) setTenantInfo(t); })
-      .catch(() => {}); // silencioso — já tem localStorage no estado inicial
+      .catch(() => {});
+    // Carrega fichas técnicas para o seletor nos itens do orçamento
+    getAllSheets().then(setSheets).catch(() => {});
   }, []);
 
   const loadData = async () => {
@@ -2191,6 +2321,31 @@ export default function BuffetQuotations() {
   const handleAddItem = () => setItems(curr => [...curr, { ...emptyItem }]);
   const handleRemoveItem = idx => setItems(curr => curr.filter((_, i) => i !== idx));
 
+  // ── Handlers de Ficha Técnica nos itens (Etapa D) ───────────────────────────
+  const handleItemSheetChange = async (idx, sheetId) => {
+    const guests = Number(form.guest_count) || 0;
+    if (!sheetId) {
+      setItems(curr => curr.map((item, i) => i === idx ? { ...item, sheet_id: null, sheet_cost: 0 } : item));
+      return;
+    }
+    try {
+      const data = await getSheetCost(sheetId, guests);
+      setItems(curr => curr.map((item, i) => i === idx ? { ...item, sheet_id: sheetId, sheet_cost: Number(data?.scaled_cost) || 0 } : item));
+    } catch {
+      setItems(curr => curr.map((item, i) => i === idx ? { ...item, sheet_id: sheetId, sheet_cost: 0 } : item));
+    }
+  };
+
+  // ── Handlers de Custos Fixos (Etapa A) ──────────────────────────────────────
+  const handleFixedCostAdd    = () => setFixedCosts(c => [...c, { ...emptyFixedCost, id: Date.now().toString() }]);
+  const handleFixedCostChange = (idx, field, value) => setFixedCosts(c => c.map((x, i) => i === idx ? { ...x, [field]: value } : x));
+  const handleFixedCostRemove = (idx) => setFixedCosts(c => c.filter((_, i) => i !== idx));
+
+  // ── Handlers de Custos Variáveis (Etapa B) ──────────────────────────────────
+  const handleVariableCostAdd    = () => setVariableCosts(c => [...c, { ...emptyVariableCost, id: Date.now().toString() }]);
+  const handleVariableCostChange = (idx, field, value) => setVariableCosts(c => c.map((x, i) => i === idx ? { ...x, [field]: value } : x));
+  const handleVariableCostRemove = (idx) => setVariableCosts(c => c.filter((_, i) => i !== idx));
+
   const handleAddBlock = block => {
     const filled = items.filter(i => i.item_name.trim() !== '');
     setItems([...filled, ...block.items]);
@@ -2212,7 +2367,8 @@ export default function BuffetQuotations() {
       return { ...i, quantity_per_person: qpp, quantity: scaled };
     });
     setItems(scaledItems);
-    // Guarda o PDF template da Valéria (se houver) para usar na geração do PDF
+    setFixedCosts([]);
+    setVariableCosts([]);
     setActivePdfTemplate(tpl.pdfTemplate || null);
     setView('builder');
     showMsg('success', `Template "${tpl.name}" carregado! Ajuste o nº de convidados para recalcular automaticamente.`);
@@ -2222,6 +2378,8 @@ export default function BuffetQuotations() {
     setEditingQuotation(null);
     setForm({ ...emptyForm });
     setItems([{ ...emptyItem }]);
+    setFixedCosts([]);
+    setVariableCosts([]);
     setActivePdfTemplate(null);
     setView('template-gallery');
   };
@@ -2266,9 +2424,16 @@ export default function BuffetQuotations() {
         quantity:   qty,
         unit_price: Number(i.unit_price) || 0,
         quantity_per_person: originalGuests > 0 ? qty / originalGuests : null,
+        sheet_id:   i.sheet_id   || null,
+        sheet_cost: Number(i.sheet_cost) || 0,
       };
     });
     setItems(loadedItems.length > 0 ? loadedItems : [{ ...emptyItem }]);
+
+    // Carrega custos fixos e variáveis — fallback seguro para orçamentos antigos
+    setFixedCosts(Array.isArray(full.fixed_costs)    ? full.fixed_costs    : []);
+    setVariableCosts(Array.isArray(full.variable_costs) ? full.variable_costs : []);
+
     setView('builder');
   };
 
@@ -2279,12 +2444,22 @@ export default function BuffetQuotations() {
     }
     setSaving(true);
     try {
+      // Sanitiza custos: garante amount numérico e remove entradas sem descrição
+      const cleanFixed    = fixedCosts.filter(c => c.description?.trim()).map(c => ({ ...c, amount: Number(c.amount) || 0 }));
+      const cleanVariable = variableCosts.filter(c => c.description?.trim()).map(c => ({ ...c, amount: Number(c.amount) || 0 }));
+
       const payload = {
         ...form,
-        guest_count:  Number(form.guest_count) || 0,
-        event_date:   form.event_date   || null,   // string vazia → null (evita erro no banco)
+        guest_count:      Number(form.guest_count) || 0,
+        event_date:       form.event_date || null,
         discount_percent: Number(form.discount_percent) || 0,
-        items,
+        fixed_costs:      cleanFixed,
+        variable_costs:   cleanVariable,
+        items: items.map(i => ({
+          ...i,
+          sheet_id:   i.sheet_id   || null,
+          sheet_cost: Number(i.sheet_cost) || 0,
+        })),
         client_id: null,
         lead_id:   form.lead_id || null,
       };
@@ -2455,6 +2630,9 @@ export default function BuffetQuotations() {
         <QuotationBuilder
           form={form}
           items={items}
+          fixedCosts={fixedCosts}
+          variableCosts={variableCosts}
+          sheets={sheets}
           clients={clients}
           leads={leads}
           editingQuotation={editingQuotation}
@@ -2463,6 +2641,13 @@ export default function BuffetQuotations() {
           onItemChange={handleItemChange}
           onAddItem={handleAddItem}
           onRemoveItem={handleRemoveItem}
+          onItemSheetChange={handleItemSheetChange}
+          onFixedCostAdd={handleFixedCostAdd}
+          onFixedCostChange={handleFixedCostChange}
+          onFixedCostRemove={handleFixedCostRemove}
+          onVariableCostAdd={handleVariableCostAdd}
+          onVariableCostChange={handleVariableCostChange}
+          onVariableCostRemove={handleVariableCostRemove}
           onAddBlock={handleAddBlock}
           onSubmit={handleSubmit}
           onBack={() => setView('list')}

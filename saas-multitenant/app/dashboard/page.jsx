@@ -7,12 +7,13 @@ import Sidebar from '../components/Sidebar';
 import ModuleLayout from '../components/ModuleLayout';
 import { apiRequest } from '../lib/api';
 
-import BuffetQuotations from '../buffet/Quotations';
-import BuffetEvents     from '../buffet/Events';
-import BuffetBilling    from '../buffet/Billing';
-import BuffetLeads      from '../buffet/Leads';
-import BuffetTeam       from '../buffet/Team';
-import BuffetDashboard  from '../buffet/Dashboard';
+import BuffetQuotations    from '../buffet/Quotations';
+import BuffetEvents        from '../buffet/Events';
+import BuffetBilling       from '../buffet/Billing';
+import BuffetLeads         from '../buffet/Leads';
+import BuffetTeam          from '../buffet/Team';
+import BuffetDashboard     from '../buffet/Dashboard';
+import BuffetTechSheets    from '../buffet/TechnicalSheets';
 
 const modulePages = {
   buffet: {
@@ -20,6 +21,7 @@ const modulePages = {
     pages: {
       dashboard:  BuffetDashboard,
       quotations: BuffetQuotations,
+      sheets:     BuffetTechSheets,
       events:     BuffetEvents,
       leads:      BuffetLeads,
       billing:    BuffetBilling,
@@ -48,6 +50,10 @@ const pageInfo = {
   billing: {
     title: 'Financeiro',
     subtitle: 'Visualize receitas, lançamentos e tendências de faturamento.',
+  },
+  sheets: {
+    title: 'Ficha Técnica',
+    subtitle: 'Cadastre receitas e calcule o custo real de produção de cada item.',
   },
   team: {
     title: 'Equipe',

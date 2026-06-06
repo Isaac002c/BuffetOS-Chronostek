@@ -26,6 +26,7 @@ const eventsRoutes = require('./routes/eventsRoutes');
 const billingRoutes = require('./routes/billingRoutes');
 const teamRoutes = require('./routes/teamRoutes');
 const templatesRoutes = require('./routes/templatesRoutes');
+const technicalSheetsRoutes = require('./routes/technicalSheetsRoutes');
 
 const app = express();
 
@@ -188,6 +189,7 @@ app.use('/api/users/management', userManagementRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/quotations', quotationsRoutes);
 app.use('/api/event-templates', templatesRoutes);
+app.use('/api/technical-sheets', technicalSheetsRoutes);
 app.use('/api/events', eventsRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/team', teamRoutes);
@@ -326,6 +328,72 @@ if (process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL && !proce
     console.log(' Migration: audit_logs garantida');
   } catch (err) {
     console.warn(' Migration warning (audit_logs):', err.message);
+  }
+
+  // ETAPA A: custos fixos do orçamento (JSONB, retrocompat com DEFAULT '[]')
+  try {
+    await pool.query(`ALTER TABLE quotations ADD COLUMN IF NOT EXISTS fixed_costs JSONB NOT NULL DEFAULT '[]'`);
+    console.log(' Migration: quotations.fixed_costs garantido');
+  } catch (err) {
+    console.warn(' Migration warning (fixed_costs):', err.message);
+  }
+
+  // ETAPA B: custos variáveis do orçamento
+  try {
+    await pool.query(`ALTER TABLE quotations ADD COLUMN IF NOT EXISTS variable_costs JSONB NOT NULL DEFAULT '[]'`);
+    console.log(' Migration: quotations.variable_costs garantido');
+  } catch (err) {
+    console.warn(' Migration warning (variable_costs):', err.message);
+  }
+
+  // ETAPA C: módulo Ficha Técnica — tabelas technical_sheets e sheet_ingredients
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS technical_sheets (
+        id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id  UUID        NOT NULL,
+        name       VARCHAR(200) NOT NULL,
+        category   VARCHAR(50)  DEFAULT 'outro',
+        base_yield NUMERIC      NOT NULL DEFAULT 1,
+        yield_unit VARCHAR(30)  DEFAULT 'pessoas',
+        notes      TEXT,
+        created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_technical_sheets_tenant ON technical_sheets (tenant_id)`);
+    console.log(' Migration: technical_sheets garantida');
+  } catch (err) {
+    console.warn(' Migration warning (technical_sheets):', err.message);
+  }
+
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sheet_ingredients (
+        id        UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+        sheet_id  UUID        NOT NULL REFERENCES technical_sheets(id) ON DELETE CASCADE,
+        tenant_id UUID        NOT NULL,
+        name      VARCHAR(200) NOT NULL,
+        quantity  NUMERIC      NOT NULL DEFAULT 0,
+        unit      VARCHAR(30)  DEFAULT 'unidade',
+        unit_cost NUMERIC      NOT NULL DEFAULT 0,
+        waste_pct NUMERIC      NOT NULL DEFAULT 0,
+        notes     TEXT
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sheet_ingredients_sheet ON sheet_ingredients (sheet_id)`);
+    console.log(' Migration: sheet_ingredients garantida');
+  } catch (err) {
+    console.warn(' Migration warning (sheet_ingredients):', err.message);
+  }
+
+  // ETAPA D: ficha técnica vinculada a itens do orçamento
+  try {
+    await pool.query(`ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS sheet_id UUID REFERENCES technical_sheets(id) ON DELETE SET NULL`);
+    await pool.query(`ALTER TABLE quotation_items ADD COLUMN IF NOT EXISTS sheet_cost NUMERIC NOT NULL DEFAULT 0`);
+    console.log(' Migration: quotation_items.sheet_id / sheet_cost garantidos');
+  } catch (err) {
+    console.warn(' Migration warning (quotation_items sheet):', err.message);
   }
 
   // FASE 11: sessões por dispositivo (max 2 simultâneas)

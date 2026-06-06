@@ -8,9 +8,15 @@ function computeQuotationTotal(items = []) {
   }, 0);
 }
 
-async function createQuotation({ client_id, lead_id, event_type, guest_count, event_date, items = [], notes = '', tenant_id, discount_percent = 0 }) {
+async function createQuotation({
+  client_id, lead_id, event_type, guest_count, event_date,
+  items = [], notes = '', tenant_id, discount_percent = 0,
+  fixed_costs = [], variable_costs = [],
+}) {
   const subtotal = computeQuotationTotal(items);
   const total = subtotal * (1 - (Number(discount_percent) || 0) / 100);
+
+  const safeJSON = (v) => (Array.isArray(v) ? JSON.stringify(v) : '[]');
 
   const client = await pool.connect();
   try {
@@ -18,8 +24,10 @@ async function createQuotation({ client_id, lead_id, event_type, guest_count, ev
 
     const query = `
       INSERT INTO quotations
-        (tenant_id, client_id, lead_id, event_type, guest_count, event_date, total_amount, status, notes, discount_percent, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+        (tenant_id, client_id, lead_id, event_type, guest_count, event_date,
+         total_amount, status, notes, discount_percent, fixed_costs, variable_costs,
+         created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
       RETURNING *
     `;
 
@@ -34,27 +42,29 @@ async function createQuotation({ client_id, lead_id, event_type, guest_count, ev
       'draft',
       notes,
       Number(discount_percent) || 0,
+      safeJSON(fixed_costs),
+      safeJSON(variable_costs),
     ]);
 
     const quotationId = result.rows[0].id;
 
     if (items.length > 0) {
       const itemQuery = `
-        INSERT INTO quotation_items (tenant_id, quotation_id, item_name, quantity, unit_price, subtotal)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO quotation_items
+          (tenant_id, quotation_id, item_name, quantity, unit_price, subtotal, sheet_id, sheet_cost)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       `;
 
       for (const item of items) {
-        const itemName = item.name || item.item_name || 'Item';
-        const quantity = Number(item.quantity) || 1;
+        const itemName  = item.name || item.item_name || 'Item';
+        const quantity  = Number(item.quantity)  || 1;
         const unitPrice = Number(item.price || item.unit_price || 0);
+        const sheetId   = item.sheet_id   || null;
+        const sheetCost = Number(item.sheet_cost) || 0;
         await client.query(itemQuery, [
-          tenant_id,
-          quotationId,
-          itemName,
-          quantity,
-          unitPrice,
-          unitPrice * quantity,
+          tenant_id, quotationId,
+          itemName, quantity, unitPrice, unitPrice * quantity,
+          sheetId, sheetCost,
         ]);
       }
     }
@@ -124,7 +134,7 @@ async function updateQuotation(quotationId, data, tenant_id) {
   const values = [];
   let paramCount = 1;
 
-  const updatableFields = ['client_id', 'lead_id', 'event_type', 'guest_count', 'event_date', 'total_amount', 'status', 'notes', 'validity_days', 'discount_percent'];
+  const updatableFields = ['client_id', 'lead_id', 'event_type', 'guest_count', 'event_date', 'total_amount', 'status', 'notes', 'validity_days', 'discount_percent', 'fixed_costs', 'variable_costs'];
   // Campos que não podem ser string vazia no PostgreSQL — converte para null
   const nullableFields  = new Set(['client_id', 'lead_id', 'event_date']);
 
@@ -159,20 +169,20 @@ async function updateQuotation(quotationId, data, tenant_id) {
       await client.query('BEGIN');
       await client.query('DELETE FROM quotation_items WHERE quotation_id = $1 AND tenant_id = $2', [quotationId, tenant_id]);
       const itemQuery = `
-        INSERT INTO quotation_items (tenant_id, quotation_id, item_name, quantity, unit_price, subtotal)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO quotation_items
+          (tenant_id, quotation_id, item_name, quantity, unit_price, subtotal, sheet_id, sheet_cost)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       `;
       for (const item of data.items) {
-        const itemName = item.name || item.item_name || 'Item';
-        const quantity = Number(item.quantity) || 1;
+        const itemName  = item.name || item.item_name || 'Item';
+        const quantity  = Number(item.quantity)  || 1;
         const unitPrice = Number(item.price || item.unit_price || 0);
+        const sheetId   = item.sheet_id   || null;
+        const sheetCost = Number(item.sheet_cost) || 0;
         await client.query(itemQuery, [
-          tenant_id,
-          quotationId,
-          itemName,
-          quantity,
-          unitPrice,
-          unitPrice * quantity,
+          tenant_id, quotationId,
+          itemName, quantity, unitPrice, unitPrice * quantity,
+          sheetId, sheetCost,
         ]);
       }
       await client.query('COMMIT');
@@ -205,16 +215,21 @@ async function duplicateQuotation(quotationId, tenant_id, clientId, leadId) {
 
   const newQuotation = await createQuotation({
     tenant_id,
-    client_id: clientId !== undefined ? clientId : original.client_id,
-    lead_id:   leadId   !== undefined ? leadId   : original.lead_id,
-    event_type: original.event_type,
-    guest_count: original.guest_count,
-    event_date: original.event_date,
-    notes: original.notes,
+    client_id:       clientId !== undefined ? clientId : original.client_id,
+    lead_id:         leadId   !== undefined ? leadId   : original.lead_id,
+    event_type:      original.event_type,
+    guest_count:     original.guest_count,
+    event_date:      original.event_date,
+    notes:           original.notes,
+    discount_percent: Number(original.discount_percent) || 0,
+    fixed_costs:     Array.isArray(original.fixed_costs)    ? original.fixed_costs    : [],
+    variable_costs:  Array.isArray(original.variable_costs) ? original.variable_costs : [],
     items: original.items.map((item) => ({
-      item_name: item.item_name,
-      quantity: item.quantity,
+      item_name:  item.item_name,
+      quantity:   item.quantity,
       unit_price: item.unit_price,
+      sheet_id:   item.sheet_id   || null,
+      sheet_cost: Number(item.sheet_cost) || 0,
     })),
   });
 
