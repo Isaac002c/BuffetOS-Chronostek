@@ -3080,14 +3080,13 @@ export default function BuffetQuotations({ isActive }) {
         guestCount,
         defaultMargin,
       });
-      // Aplica receitaRecomendada ao total salvo apenas quando há custos internos
-      // definidos (fichas técnicas, custos fixos ou variáveis). Para propostas com
-      // itens manuais sem fichas (custoTotal = 0), o unit_price representa o preço
-      // de venda ao cliente e NÃO deve ser inflado pela margem automaticamente —
-      // a receitaRecomendada fica visível na sidebar como sugestão informativa.
-      const finalTotal = fin.custoTotal > 0
-        ? Math.round(Math.max(fin.receitaTotal, fin.receitaRecomendada) * 100) / 100
-        : Math.round(fin.receitaTotal * 100) / 100;
+      // Total final: usa sempre o maior valor entre receita atual e receita
+      // recomendada pela margem. Isso garante que ao salvar, o total reflita
+      // a margem desejada em todos os cenários:
+      //   - Com fichas técnicas: receitaRecomendada = custoFichas / (1 - margin%)
+      //   - Sem fichas (itens manuais): receitaRecomendada = receitaItens / (1 - margin%)
+      // O PDF exportado sempre refletirá o valor correto após aplicação da margem.
+      const finalTotal = Math.round(Math.max(fin.receitaTotal, fin.receitaRecomendada) * 100) / 100;
 
       const payload = {
         ...form,
