@@ -10,7 +10,7 @@ function computeQuotationTotal(items = []) {
 
 async function createQuotation({
   client_id, lead_id, event_type, guest_count, event_date,
-  items = [], notes = '', tenant_id, discount_percent = 0,
+  items = [], notes = '', buffet_menu = '', tenant_id, discount_percent = 0,
   fixed_costs = [], variable_costs = [], default_margin = 40,
 }) {
   const subtotal = computeQuotationTotal(items);
@@ -25,9 +25,9 @@ async function createQuotation({
     const query = `
       INSERT INTO quotations
         (tenant_id, client_id, lead_id, event_type, guest_count, event_date,
-         total_amount, status, notes, discount_percent, fixed_costs, variable_costs,
+         total_amount, status, notes, buffet_menu, discount_percent, fixed_costs, variable_costs,
          default_margin, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
       RETURNING *
     `;
 
@@ -41,6 +41,7 @@ async function createQuotation({
       total,
       'draft',
       notes,
+      buffet_menu || '',
       Number(discount_percent) || 0,
       safeJSON(fixed_costs),
       safeJSON(variable_costs),
@@ -135,7 +136,7 @@ async function updateQuotation(quotationId, data, tenant_id) {
   const values = [];
   let paramCount = 1;
 
-  const updatableFields = ['client_id', 'lead_id', 'event_type', 'guest_count', 'event_date', 'total_amount', 'status', 'notes', 'validity_days', 'discount_percent', 'fixed_costs', 'variable_costs', 'default_margin'];
+  const updatableFields = ['client_id', 'lead_id', 'event_type', 'guest_count', 'event_date', 'total_amount', 'status', 'notes', 'buffet_menu', 'validity_days', 'discount_percent', 'fixed_costs', 'variable_costs', 'default_margin'];
   // Campos que não podem ser string vazia no PostgreSQL — converte para null
   const nullableFields  = new Set(['client_id', 'lead_id', 'event_date']);
 

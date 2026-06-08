@@ -75,7 +75,7 @@ function CachedTabs({ moduleKey, activeTab }) {
         mountedRef.current[key] = true;
         return (
           <div key={key} style={{ display: isActive ? 'block' : 'none' }}>
-            <Page />
+            <Page isActive={isActive} />
           </div>
         );
       })}

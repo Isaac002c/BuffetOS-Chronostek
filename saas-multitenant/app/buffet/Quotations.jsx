@@ -313,30 +313,26 @@ function _buildDefaultTable(doc, quotation, clientName, co, fmtBRL, fmtDate) {
   doc.text('ITENS DO ORÇAMENTO', margin, y);
   y += 5;
 
-  // Table header
-  const colX   = [margin, margin + 92, margin + 112, margin + 134];
-  const colW   = [90, 18, 20, W - margin - 134 - margin];
-  const rowH   = 7;
+  // Table header — apenas Descrição e Qtd (preços não aparecem para o cliente)
+  const qtyColW = 25;
+  const descColW = W - 2 * margin - qtyColW;
+  const colDescX = margin;
+  const colQtyX  = margin + descColW;
+  const rowH = 7;
 
   doc.setFillColor(...LIGHT);
   doc.rect(margin, y, W - 2 * margin, rowH, 'F');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(...GRAY);
-  ['Descrição', 'Qtd', 'V. Unit.', 'Subtotal'].forEach((h, i) => {
-    const align = i === 0 ? 'left' : 'right';
-    doc.text(h, i === 0 ? colX[i] + 2 : colX[i] + colW[i] - 2, y + 5, { align });
-  });
+  doc.text('Descrição', colDescX + 2, y + 5, { align: 'left' });
+  doc.text('Qtd', colQtyX + qtyColW - 2, y + 5, { align: 'right' });
   y += rowH;
 
   // Table rows
   const items = quotation.items || [];
-  let subtotal = 0;
   items.forEach((item, idx) => {
-    const qty   = Number(item.quantity || 0);
-    const price = Number(item.unit_price || item.price || 0);
-    const sub   = qty * price;
-    subtotal   += sub;
+    const qty = Number(item.quantity || 0);
 
     if (idx % 2 === 0) {
       doc.setFillColor(252, 253, 254);
@@ -347,16 +343,12 @@ function _buildDefaultTable(doc, quotation, clientName, co, fmtBRL, fmtDate) {
     doc.setFontSize(8.5);
     doc.setTextColor(...DARK);
 
-    // Truncate long names
-    const name = doc.splitTextToSize(item.item_name || '—', colW[0] - 4)[0];
-    doc.text(name, colX[0] + 2, y + 5);
-    doc.text(String(qty), colX[1] + colW[1] - 2, y + 5, { align: 'right' });
-    doc.text(fmtBRL(price), colX[2] + colW[2] - 2, y + 5, { align: 'right' });
-    doc.text(fmtBRL(sub),   colX[3] + colW[3] - 2, y + 5, { align: 'right' });
+    const name = doc.splitTextToSize(item.item_name || '—', descColW - 4)[0];
+    doc.text(name, colDescX + 2, y + 5);
+    doc.text(String(qty), colQtyX + qtyColW - 2, y + 5, { align: 'right' });
 
     y += rowH;
 
-    // Paginação automática
     if (y > doc.internal.pageSize.getHeight() - 40) {
       doc.addPage();
       y = 20;
@@ -389,6 +381,24 @@ function _buildDefaultTable(doc, quotation, clientName, co, fmtBRL, fmtDate) {
   doc.setTextColor(...PRIMARY);
   doc.text(fmtBRL(total), W - margin - 2, y + 6, { align: 'right' });
   y += 18;
+
+  // ── Cardápio / Itens do Buffet (opcional) ────────────────────────────────────
+  if (quotation.buffet_menu) {
+    doc.setDrawColor(...BORDER);
+    doc.line(margin, y, W - margin, y);
+    y += 6;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(...GRAY);
+    doc.text('CARDÁPIO / ITENS DO BUFFET', margin, y);
+    y += 5;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(...DARK);
+    const menuLines = doc.splitTextToSize(quotation.buffet_menu, W - 2 * margin);
+    doc.text(menuLines, margin, y);
+    y += menuLines.length * 5 + 4;
+  }
 
   // ── Notes ────────────────────────────────────────────────────────────────────
   if (quotation.notes) {
@@ -630,6 +640,7 @@ const emptyForm = {
   guest_count:     0,
   status:          'draft',
   notes:           '',
+  buffet_menu:     '',
   discount_percent: 0,
   default_margin:  40,  // % de margem sobre preço final (padrão buffet)
 };
@@ -1270,62 +1281,26 @@ function TemplateGallery({ onSelect, onClose, tenantName }) {
               </div>
             )}
 
-            {/* ── SEÇÃO 2: Modelos Padrão ── */}
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-                <span style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>📋 Modelos Padrão</span>
-                <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>pré-configurados pelo sistema</span>
+            {/* Estado vazio — sem cardápios cadastrados */}
+            {localTemplates.length === 0 && (
+              <div style={{
+                textAlign: 'center', padding: '48px 24px',
+                color: '#94a3b8',
+              }}>
+                <div style={{ fontSize: 48, marginBottom: 16 }}>📋</div>
+                <p style={{ fontSize: 15, fontWeight: 600, color: '#64748b', margin: '0 0 8px' }}>
+                  Nenhum cardápio cadastrado ainda
+                </p>
+                <p style={{ fontSize: 13, margin: '0 0 20px' }}>
+                  Crie seu primeiro modelo clicando em "Templates DB"
+                </p>
+                <button onClick={() => setShowManager(true)} style={{
+                  padding: '10px 20px', borderRadius: 10,
+                  border: 'none', background: '#3b82f6',
+                  color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                }}>+ Criar cardápio</button>
               </div>
-              <CardGrid>
-                {EVENT_TEMPLATES.map(tpl => (
-                  <div key={tpl.id} onClick={() => handlePresetSelect(tpl)} style={{
-                    background: tpl.bgColor, border: '2px solid transparent',
-                    borderRadius: 20, padding: 24, cursor: 'pointer',
-                    transition: 'all 0.2s ease', position: 'relative',
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.transform = 'translateY(-4px)';
-                    e.currentTarget.style.borderColor = tpl.accentColor;
-                    e.currentTarget.style.boxShadow = `0 12px 32px ${tpl.accentColor}30`;
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.borderColor = 'transparent';
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}>
-                    <div style={{ fontSize: 40, marginBottom: 12, lineHeight: 1 }}>{tpl.emoji}</div>
-                    <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: '0 0 6px' }}>{tpl.name}</h3>
-                    <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 12px', lineHeight: 1.5 }}>{tpl.description}</p>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
-                      {tpl.tags.map(tag => (
-                        <span key={tag} style={{
-                          fontSize: 11, fontWeight: 600, padding: '2px 8px',
-                          borderRadius: 999, background: `${tpl.accentColor}18`, color: tpl.accentColor,
-                        }}>{tag}</span>
-                      ))}
-                    </div>
-                    <div style={{ borderTop: `1px solid ${tpl.accentColor}25`, paddingTop: 10 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{tpl.priceRange}</div>
-                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{tpl.guestAvg}</div>
-                    </div>
-                    {tpl.items.length > 0 && (
-                      <span style={{
-                        position: 'absolute', top: 12, right: 12,
-                        fontSize: 10, fontWeight: 600, padding: '3px 8px',
-                        borderRadius: 999, background: `${tpl.accentColor}18`, color: tpl.accentColor,
-                      }}>{tpl.items.length} itens</span>
-                    )}
-                    <button type="button" onClick={e => { e.stopPropagation(); handleEditPreset(tpl); }} style={{
-                      position: 'absolute', bottom: 12, right: 12,
-                      padding: '3px 9px', borderRadius: 7,
-                      border: `1px solid ${tpl.accentColor}40`,
-                      background: '#fff', color: tpl.accentColor,
-                      fontSize: 10, fontWeight: 600, cursor: 'pointer', opacity: 0.85,
-                    }}>✎ Editar</button>
-                  </div>
-                ))}
-              </CardGrid>
-            </div>
+            )}
 
           </div>{/* fim scroll area */}
         </div>
@@ -2057,6 +2032,18 @@ function QuotationBuilder({
                   style={{ ...S.input, minHeight: 78, resize: 'vertical' }}
                 />
               </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ ...S.label, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span>🍽️ Cardápio / Itens do Buffet</span>
+                  <span style={{ fontSize: 11, fontWeight: 400, color: '#94a3b8' }}>— opcional, aparece na proposta quando preenchido</span>
+                </label>
+                <textarea
+                  value={form.buffet_menu}
+                  onChange={e => onFieldChange('buffet_menu', e.target.value)}
+                  placeholder={"Ex:\n• Coquetel de entrada: bruschetas, mini-quiches, canapés\n• Prato principal: risoto de camarão, filé ao molho madeira\n• Sobremesas: pudim, petit gateau, frutas da estação\n• Open bar: refrigerantes, sucos, espumante"}
+                  style={{ ...S.input, minHeight: 110, resize: 'vertical', fontFamily: 'inherit' }}
+                />
+              </div>
             </div>
           </div>
           </BuilderSection>
@@ -2418,7 +2405,7 @@ function QuotationList({
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
-export default function BuffetQuotations() {
+export default function BuffetQuotations({ isActive }) {
   const [view, setView] = useState('list'); // 'list' | 'template-gallery' | 'builder'
   const [quotations, setQuotations] = useState([]);
   const [clients, setClients] = useState([]);
@@ -2451,6 +2438,14 @@ export default function BuffetQuotations() {
       .then(t => { if (t?.name) setTenantInfo(t); })
       .catch(() => {});
   }, []);
+
+  // Recarrega leads sempre que a aba ficar ativa — garante que leads criados
+  // em outras abas apareçam sem precisar de F5 (CachedTabs mantém em memória)
+  useEffect(() => {
+    if (isActive) {
+      getLeads().then(setLeads).catch(() => {});
+    }
+  }, [isActive]);
 
   const loadData = async () => {
     setLoading(true);
@@ -2726,6 +2721,7 @@ export default function BuffetQuotations() {
       guest_count:  full.guest_count  || 0,
       status:           full.status           || 'draft',
       notes:            full.notes            || '',
+      buffet_menu:      full.buffet_menu      || '',
       discount_percent: full.discount_percent || 0,
       default_margin:   full.default_margin   != null ? Number(full.default_margin) : DEFAULT_MARGIN_PCT,
     });
