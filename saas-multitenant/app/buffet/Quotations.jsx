@@ -213,50 +213,87 @@ async function generateQuotationPDF(quotation, clientName, tenantCompany = {}, p
         }
       }
 
-      // ── Página extra: Cardápio / O que será servido ──────────────────────────
+      // ── Página extra: Itens do Cardápio — identidade visual da proposta ─────────
       if (quotation.buffet_menu && quotation.buffet_menu.trim()) {
-        const { rgb: _rgb, StandardFonts: SF } = await import('pdf-lib');
+        const { rgb: _rgb } = await import('pdf-lib');
         const pageW = 595.28, pageH = 841.89;
         const extraPage = pdfDoc.addPage([pageW, pageH]);
         const fontR = await pdfDoc.embedFont(StandardFonts.Helvetica);
         const fontB = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-        const blue  = _rgb(0.149, 0.396, 0.871);   // #2563eb
-        const dark  = _rgb(0.09,  0.09,  0.09);
-        const marg  = 48;
+
+        // Paleta da proposta original
+        const cBege   = _rgb(0.910, 0.863, 0.816);  // fundo bege #E8DCCC
+        const cGold   = _rgb(0.780, 0.576, 0.216);  // dourado  #C79337
+        const cDark   = _rgb(0.212, 0.145, 0.086);  // marrom escuro #362517
+        const cWhite  = _rgb(1, 1, 1);
+        const cGoldLt = _rgb(0.973, 0.941, 0.878);  // dourado claríssimo para caixa
+        const marg = 48;
         const inner = pageW - marg * 2;
 
-        // Cabeçalho da página
-        extraPage.drawRectangle({ x: 0, y: pageH - 60, width: pageW, height: 60, color: blue });
-        extraPage.drawText('CARDÁPIO / O QUE SERÁ SERVIDO', {
-          x: marg, y: pageH - 36, size: 16, font: fontB, color: _rgb(1, 1, 1),
+        // Fundo bege completo
+        extraPage.drawRectangle({ x: 0, y: 0, width: pageW, height: pageH, color: cBege });
+
+        // Faixa dourada do título (estilo "Informações Importantes")
+        const titleBarH = 72;
+        extraPage.drawRectangle({ x: 0, y: pageH - titleBarH, width: pageW, height: titleBarH, color: cGold });
+        const titleText = 'Itens do Cardápio';
+        const titleW = fontB.widthOfTextAtSize(titleText, 22);
+        extraPage.drawText(titleText, {
+          x: (pageW - titleW) / 2, y: pageH - titleBarH + 24,
+          size: 22, font: fontB, color: cDark,
         });
 
-        // Caixa de conteúdo
-        const lines = quotation.buffet_menu.split('\n');
-        const lineH = 16;
-        const boxH  = lines.length * lineH + 32;
-        const boxY  = pageH - 100 - boxH;
+        // Linhas do cardápio com espaçamento generoso
+        const rawLines  = quotation.buffet_menu.split('\n').filter(l => l.trim());
+        const lineH     = 22;   // espaçamento maior entre itens
+        const padTop    = 28;
+        const padBot    = 20;
+        const boxH      = rawLines.length * lineH + padTop + padBot;
+        const boxY      = pageH - titleBarH - 28 - boxH;
 
+        // Caixa de fundo dourado claro com borda dourada
         extraPage.drawRectangle({
-          x: marg - 8, y: boxY - 4, width: inner + 16, height: boxH + 8,
-          color: _rgb(0.937, 0.953, 1),  // azul muito claro
+          x: marg - 12, y: boxY, width: inner + 24, height: boxH,
+          color: cGoldLt,
         });
         extraPage.drawRectangle({
-          x: marg - 8, y: boxY - 4, width: 4, height: boxH + 8, color: blue,
+          x: marg - 12, y: boxY, width: 5, height: boxH, color: cGold,
         });
 
-        lines.forEach((line, i) => {
-          const safeText = (line || '').replace(/[^\x00-\xFF]/g, ' ');
+        // Itens
+        rawLines.forEach((line, i) => {
+          const safeText = (line || '').replace(/[^\x00-\xFF]/g, (c) => {
+            const map = { 'ç':'c','ã':'a','õ':'o','â':'a','ê':'e','ô':'o','í':'i','ú':'u','á':'a','é':'e','ó':'o','à':'a','ü':'u','ñ':'n','Ç':'C','Ã':'A','Õ':'O','Â':'A','Ê':'E','Ô':'O','Í':'I','Ú':'U','Á':'A','É':'E','Ó':'O','À':'A','Ü':'U','Ñ':'N' };
+            return map[c] || ' ';
+          });
+          const textY = boxY + boxH - padTop - i * lineH;
           extraPage.drawText(safeText, {
-            x: marg, y: boxY + boxH - 16 - i * lineH,
-            size: 11, font: fontR, color: dark, maxWidth: inner - 8,
+            x: marg, y: textY,
+            size: 11, font: fontR, color: cDark, maxWidth: inner - 8,
           });
         });
 
-        // Rodapé
-        extraPage.drawRectangle({ x: 0, y: 0, width: pageW, height: 28, color: blue });
+        // Bloco do valor total
+        const total = Number(quotation.total_amount || 0);
+        const totalLabel = 'Valor Total da Proposta';
+        const totalValue = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        const totalBlockY = boxY - 56;
+
+        extraPage.drawRectangle({
+          x: marg - 12, y: totalBlockY, width: inner + 24, height: 44, color: cGold,
+        });
+        extraPage.drawText(totalLabel, {
+          x: marg, y: totalBlockY + 28, size: 10, font: fontR, color: cDark,
+        });
+        extraPage.drawText(totalValue, {
+          x: marg, y: totalBlockY + 12, size: 16, font: fontB, color: cDark,
+        });
+
+        // Rodapé bege com nome do buffet centralizado
+        extraPage.drawRectangle({ x: 0, y: 0, width: pageW, height: 32, color: cGold });
+        const footerW = fontR.widthOfTextAtSize(co.name, 9);
         extraPage.drawText(co.name, {
-          x: marg, y: 10, size: 9, font: fontB, color: _rgb(1, 1, 1),
+          x: (pageW - footerW) / 2, y: 11, size: 9, font: fontB, color: cDark,
         });
       }
 
