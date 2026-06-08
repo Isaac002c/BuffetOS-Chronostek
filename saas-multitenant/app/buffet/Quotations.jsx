@@ -331,8 +331,11 @@ function _buildDefaultTable(doc, quotation, clientName, co, fmtBRL, fmtDate) {
 
   // Table rows
   const items = quotation.items || [];
+  let subtotal = 0;
   items.forEach((item, idx) => {
-    const qty = Number(item.quantity || 0);
+    const qty   = Number(item.quantity || 0);
+    const price = Number(item.unit_price || item.price || 0);
+    subtotal += qty * price;
 
     if (idx % 2 === 0) {
       doc.setFillColor(252, 253, 254);
