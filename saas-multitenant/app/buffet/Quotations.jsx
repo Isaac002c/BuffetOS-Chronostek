@@ -392,15 +392,9 @@ async function generateQuotationPDF(quotation, clientName, tenantCompany = {}, p
           pg.drawText(subtitleTxt, { x: (pageW - subW) / 2, y: pageH - titleBarH + 18, size: 11, font: fontR, color: cDark });
         }
 
-        // Cabeçalho "Itens do Cardápio"
-        const secH = 44;
-        const secY = pageH - titleBarH - secH;
-        pg.drawRectangle({ x: 0, y: secY, width: pageW, height: secH, color: cDark });
-        const secTxt = 'Itens do Cardapio';
-        const secW = fontB.widthOfTextAtSize(secTxt, 16);
-        pg.drawText(secTxt, { x: (pageW - secW) / 2, y: secY + 14, size: 16, font: fontB, color: cGold });
-
         // Caixa de itens
+        const secH = 0;
+        const secY = pageH - titleBarH;
         const boxBot = isLast ? footerH + totalH + 12 : footerH + 12;
         const boxTop = secY - 10;
         const boxH   = boxTop - boxBot;
