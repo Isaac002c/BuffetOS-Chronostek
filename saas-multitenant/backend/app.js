@@ -354,6 +354,14 @@ if (process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL && !proce
     console.warn(' Migration warning (variable_costs):', err.message);
   }
 
+  // ETAPA B2: cardápio opcional da proposta
+  try {
+    await pool.query(`ALTER TABLE quotations ADD COLUMN IF NOT EXISTS buffet_menu TEXT NOT NULL DEFAULT ''`);
+    console.log(' Migration: quotations.buffet_menu garantido');
+  } catch (err) {
+    console.warn(' Migration warning (buffet_menu):', err.message);
+  }
+
   // ETAPA C: módulo Ficha Técnica — tabelas technical_sheets e sheet_ingredients
   try {
     await pool.query(`
