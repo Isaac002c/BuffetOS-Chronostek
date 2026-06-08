@@ -22,13 +22,13 @@ const pool = new Pool({
 });
 
 // ─── Dados da empresa / usuário ───────────────────────────────────────────────
-const TENANT_NAME    = 'Valeria Rios Buffet';
+const TENANT_NAME    = 'Valéria Rios Buffet';
 const TENANT_PHONE   = '(21) 99999-0000';   // ← altere para o telefone real
 const TENANT_EMAIL   = 'contato@valeriasbuffet.com.br'; // ← altere para o e-mail real
 const TENANT_CNPJ    = '';                   // ← preencha se tiver CNPJ
 const TENANT_ADDRESS = 'Rio de Janeiro/RJ'; // ← altere para o endereço real
 
-const USER_NAME    = 'Valeria & Antonio';
+const USER_NAME    = 'Valéria & Antonio';
 const USER_EMAIL   = 'valeria@valeriasbuffet.com.br';
 const USER_PASS    = 'Valeria2024';
 

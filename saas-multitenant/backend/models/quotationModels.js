@@ -124,16 +124,21 @@ async function createQuotation({
   client_id, lead_id, event_type, guest_count, event_date,
   items = [], notes = '', buffet_menu = '', tenant_id, discount_percent = 0,
   fixed_costs = [], variable_costs = [], default_margin = 40,
+  total_amount,
 }) {
   const normalizedFixedCosts = normalizeCostArray(fixed_costs);
   const normalizedVariableCosts = normalizeCostArray(variable_costs);
-  const total = quotationTotalFromData({
-    items,
-    fixed_costs: normalizedFixedCosts,
-    variable_costs: normalizedVariableCosts,
-    discount_percent,
-    guest_count,
-  });
+  // Honor explicit total_amount from frontend (already margin-corrected).
+  // Fall back to formula-based computation when not provided.
+  const total = (total_amount !== undefined && safeNumber(total_amount) > 0)
+    ? safeNumber(total_amount)
+    : quotationTotalFromData({
+        items,
+        fixed_costs: normalizedFixedCosts,
+        variable_costs: normalizedVariableCosts,
+        discount_percent,
+        guest_count,
+      });
 
   const client = await pool.connect();
   try {
@@ -230,7 +235,10 @@ async function updateQuotation(quotationId, data, tenant_id) {
   if (Array.isArray(updateData.items)) {
     updateData.fixed_costs = normalizeCostArray(updateData.fixed_costs);
     updateData.variable_costs = normalizeCostArray(updateData.variable_costs);
-    updateData.total_amount = quotationTotalFromData(updateData);
+    // Honor explicit total_amount from frontend (already margin-corrected).
+    if (updateData.total_amount === undefined || updateData.total_amount === null) {
+      updateData.total_amount = quotationTotalFromData(updateData);
+    }
   }
 
   const fields = [];
@@ -352,21 +360,15 @@ async function duplicateQuotation(quotationId, tenant_id, clientId, leadId) {
 }
 
 async function setQuotationStatus(quotationId, status, tenant_id) {
-  const quotation = await getQuotationDetail(quotationId, tenant_id);
-  if (!quotation) {
-    return null;
-  }
-
-  const total = quotationTotalFromData(quotation);
+  // Do not recompute total_amount — preserve the margin-corrected total saved by the user.
   const result = await pool.query(
     `UPDATE quotations
      SET status = $1,
-         total_amount = $2,
          updated_at = NOW()
-     WHERE id = $3
-       AND tenant_id = $4
+     WHERE id = $2
+       AND tenant_id = $3
      RETURNING *`,
-    [status, total, quotationId, tenant_id]
+    [status, quotationId, tenant_id]
   );
 
   return result.rows[0] || null;

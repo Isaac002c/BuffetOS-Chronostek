@@ -249,7 +249,7 @@ async function generateQuotationPDF(quotation, clientName, tenantCompany = {}, p
         // Linhas do cardápio com espaçamento generoso
         const rawLines  = quotation.buffet_menu.split('\n').filter(l => l.trim());
         const footerH   = s(32);
-        const totalH    = s(44);
+        const totalH    = s(56);  // expanded to fit validity line
         const padTop    = s(28);
         const padBot    = s(20);
         const maxBoxH   = pageH - titleBarH - s(28) - totalH - s(56) - footerH;
@@ -293,10 +293,13 @@ async function generateQuotationPDF(quotation, clientName, tenantCompany = {}, p
           x: marg - s(12), y: totalBlockY, width: inner + s(24), height: totalH, color: cGold,
         });
         extraPage.drawText(totalLabel, {
-          x: marg, y: totalBlockY + s(28), size: s(10), font: fontR, color: cDark,
+          x: marg, y: totalBlockY + s(40), size: s(10), font: fontR, color: cDark,
         });
         extraPage.drawText(totalValue, {
-          x: marg, y: totalBlockY + s(12), size: s(16), font: fontB, color: cDark,
+          x: marg, y: totalBlockY + s(24), size: s(16), font: fontB, color: cDark,
+        });
+        extraPage.drawText('Proposta válida por 30 dias.', {
+          x: marg, y: totalBlockY + s(10), size: s(8), font: fontR, color: cDark,
         });
 
         // Rodapé bege com nome do buffet centralizado
@@ -365,7 +368,7 @@ function _buildDefaultTable(doc, quotation, clientName, co, fmtBRL, fmtDate) {
   doc.setTextColor(...DARK);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
-  doc.text('ORÇAMENTO / PROPOSTA', margin, y);
+  doc.text('PROPOSTA', margin, y);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(...GRAY);
@@ -405,7 +408,7 @@ function _buildDefaultTable(doc, quotation, clientName, co, fmtBRL, fmtDate) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   doc.setTextColor(...DARK);
-  doc.text('ITENS DO ORÇAMENTO', margin, y);
+  doc.text('ITENS DA PROPOSTA', margin, y);
   y += 5;
 
   // Table header — apenas Descrição e Qtd (preços não aparecem para o cliente)
@@ -530,7 +533,7 @@ function _buildDefaultTable(doc, quotation, clientName, co, fmtBRL, fmtDate) {
   doc.setFontSize(7.5);
   doc.setTextColor(255, 255, 255);
   doc.text(
-    `${co.name}  ·  ${co.address || 'Brasil'}  ·  Válido por 30 dias`,
+    `${co.name}  ·  ${co.address || 'Brasil'}  ·  Proposta válida por 30 dias.`,
     W / 2, pageH - 5, { align: 'center' }
   );
 }
@@ -1930,13 +1933,13 @@ function FinancialSidebar({
         {/* Ações de salvar/aprovar */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
           <button onClick={onSave} disabled={loading} style={{ width: '100%', padding: '11px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#3b82f6,#2563eb)', color: 'white', fontSize: 13, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
-            {loading ? 'Salvando...' : editingQuotation ? '💾 Salvar alterações' : '✓ Criar orçamento'}
+            {loading ? 'Salvando...' : editingQuotation ? '💾 Salvar alterações' : '✓ Criar proposta'}
           </button>
           {editingQuotation && status !== 'approved' && status !== 'cancelled' && (
             <button onClick={onApprove} style={{ width: '100%', padding: '10px', borderRadius: 10, border: 'none', background: '#dcfce7', color: '#16a34a', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>✓ Aprovar proposta</button>
           )}
           {editingQuotation && status !== 'cancelled' && (
-            <button onClick={onCancel} style={{ width: '100%', padding: '10px', borderRadius: 10, border: '1px solid #fed7aa', background: '#fff7ed', color: '#ea580c', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>✕ Cancelar orçamento</button>
+            <button onClick={onCancel} style={{ width: '100%', padding: '10px', borderRadius: 10, border: '1px solid #fed7aa', background: '#fff7ed', color: '#ea580c', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>✕ Cancelar proposta</button>
           )}
           {editingQuotation && status === 'approved' && onConvertToEvent && (
             <button onClick={onConvertToEvent} style={{ width: '100%', padding: '10px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#7c3aed,#6d28d9)', color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>📅 Converter em Evento</button>
@@ -2020,7 +2023,7 @@ function QuotationBuilder({
               </div>
               {editingQuotation && (
                 <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>
-                  #{editingQuotation.id} · Editando orçamento
+                  #{editingQuotation.id} · Editando proposta
                 </div>
               )}
             </div>
@@ -2309,7 +2312,7 @@ function QuotationBuilder({
                 <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>Margem = lucro / receita (não markup)</div>
               </div>
               <div>
-                <label style={S.label}>Status do Orçamento</label>
+                <label style={S.label}>Status da Proposta</label>
                 <select value={form.status} onChange={e => onFieldChange('status', e.target.value)} style={S.input}>
                   <option value="draft">Rascunho</option>
                   <option value="approved">Aprovado</option>
@@ -2427,7 +2430,7 @@ function QuotationCard({ quotation, getClientName, onEdit, onDuplicate, onApprov
           }}>✓</button>
         )}
         {quotation.status !== 'cancelled' && (
-          <button onClick={() => onCancel(quotation)} title="Cancelar orçamento" style={{
+          <button onClick={() => onCancel(quotation)} title="Cancelar proposta" style={{
             padding: '8px 12px', borderRadius: 10, border: '1px solid #fed7aa',
             background: '#fff7ed', color: '#ea580c', fontSize: 13, fontWeight: 700, cursor: 'pointer',
           }}>✕</button>
@@ -2438,7 +2441,7 @@ function QuotationCard({ quotation, getClientName, onEdit, onDuplicate, onApprov
             background: '#ede9fe', color: '#7c3aed', fontSize: 13, fontWeight: 700, cursor: 'pointer',
           }}>📅</button>
         )}
-        <button onClick={() => { if (window.confirm('Excluir este orçamento?')) onDelete(quotation.id); }} title="Excluir" style={{
+        <button onClick={() => { if (window.confirm('Excluir esta proposta?')) onDelete(quotation.id); }} title="Excluir" style={{
           padding: '8px 12px', borderRadius: 10, border: '1px solid #fecaca',
           background: '#fef2f2', color: '#dc2626', fontSize: 13, cursor: 'pointer',
           transition: 'all 0.15s',
@@ -2475,9 +2478,9 @@ function QuotationList({
       {/* Page Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: 26, fontWeight: 700, color: '#0f172a' }}>Orçamentos</h2>
+          <h2 style={{ margin: 0, fontSize: 26, fontWeight: 700, color: '#0f172a' }}>Propostas</h2>
           <p style={{ margin: '5px 0 0', color: '#64748b', fontSize: 14 }}>
-            {filtered.length} orçamento{filtered.length !== 1 ? 's' : ''} · R$ {fmt(totalValue)} no total · {approved} aprovado{approved !== 1 ? 's' : ''}
+            {filtered.length} proposta{filtered.length !== 1 ? 's' : ''} · R$ {fmt(totalValue)} no total · {approved} aprovado{approved !== 1 ? 's' : ''}
           </p>
         </div>
         <button onClick={onNew} style={{
@@ -2489,7 +2492,7 @@ function QuotationList({
         }}
         onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(37,99,235,0.4)'; }}
         onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(37,99,235,0.3)'; }}>
-          ✦ Novo Orçamento
+          ✦ Nova Proposta
         </button>
       </div>
 
@@ -2544,17 +2547,17 @@ function QuotationList({
         }}>
           <div style={{ fontSize: 52, marginBottom: 14, opacity: 0.4 }}>📋</div>
           <h3 style={{ fontSize: 20, fontWeight: 700, color: '#334155', margin: '0 0 8px' }}>
-            Nenhum orçamento encontrado
+            Nenhuma proposta encontrada
           </h3>
           <p style={{ color: '#64748b', margin: '0 0 24px', fontSize: 15 }}>
-            Crie seu primeiro orçamento com o Event Builder inteligente
+            Crie sua primeira proposta com o Event Builder inteligente
           </p>
           <button onClick={onNew} style={{
             padding: '11px 24px', borderRadius: 12, border: 'none',
             background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
             color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer',
           }}>
-            ✦ Criar Primeiro Orçamento
+            ✦ Criar Primeira Proposta
           </button>
         </div>
       ) : (
@@ -2949,14 +2952,32 @@ export default function BuffetQuotations({ isActive }) {
       const cleanFixed    = fixedCosts.filter(c => c.description?.trim()).map(c => ({ ...c, amount: Number(c.amount) || 0 }));
       const cleanVariable = variableCosts.filter(c => c.description?.trim()).map(c => ({ ...c, amount: Number(c.amount) || 0 }));
 
+      const guestCount    = Number(form.guest_count) || 0;
+      const defaultMargin = Math.min(Math.max(Number(form.default_margin) || DEFAULT_MARGIN_PCT, 0), 99.9);
+
+      // Calcula o total correto com margem no frontend para garantir consistência
+      // entre o que a tela exibe e o que é gravado no banco.
+      // receitaRecomendada = custoTotal / (1 - margem) garante a margem desejada.
+      // Usa o maior entre o total atual e o recomendado (nunca grava abaixo da meta).
+      const fin = calcFinancials({
+        items,
+        fixedCosts:    cleanFixed,
+        variableCosts: cleanVariable,
+        discountPct:   Number(form.discount_percent) || 0,
+        guestCount,
+        defaultMargin,
+      });
+      const finalTotal = Math.round(Math.max(fin.receitaTotal, fin.receitaRecomendada) * 100) / 100;
+
       const payload = {
         ...form,
-        guest_count:      Number(form.guest_count) || 0,
+        guest_count:      guestCount,
         event_date:       form.event_date || null,
         discount_percent: Number(form.discount_percent) || 0,
-        default_margin:   Number(form.default_margin)   ?? DEFAULT_MARGIN_PCT,
+        default_margin:   defaultMargin,
         fixed_costs:      cleanFixed,
         variable_costs:   cleanVariable,
+        total_amount:     finalTotal,
         items: items.map(i => ({
           item_name:  i.item_name  || '',
           quantity:   Number(i.quantity)   || 0,
@@ -2970,16 +2991,16 @@ export default function BuffetQuotations({ isActive }) {
       };
       if (editingQuotation) {
         await updateQuotation(editingQuotation.id, payload);
-        showMsg('success', 'Orçamento atualizado com sucesso!');
+        showMsg('success', 'Proposta atualizada com sucesso!');
       } else {
         await createQuotation(payload);
-        showMsg('success', 'Orçamento criado com sucesso!');
+        showMsg('success', 'Proposta criada com sucesso!');
       }
       await loadData();
       setEditingQuotation(null); // limpa estado de edição após salvar
       setView('list');
     } catch (e) {
-      showMsg('error', e.message || 'Erro ao salvar orçamento.');
+      showMsg('error', e.message || 'Erro ao salvar proposta.');
     } finally {
       setSaving(false);
     }
