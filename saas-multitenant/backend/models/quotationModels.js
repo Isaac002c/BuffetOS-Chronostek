@@ -144,7 +144,7 @@ async function createQuotation({
         (tenant_id, client_id, lead_id, event_type, guest_count, event_date,
          total_amount, status, notes, buffet_menu, discount_percent, fixed_costs, variable_costs,
          default_margin, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, NOW(), NOW())
       RETURNING *
     `;
 
@@ -266,7 +266,7 @@ async function updateQuotation(quotationId, data, tenant_id) {
     if (field === 'guest_count' || field === 'discount_percent' || field === 'total_amount') value = safeNumber(raw);
     if (field === 'default_margin') value = safeNumber(raw, 40);
 
-    fields.push(`${field} = $${paramCount}`);
+    fields.push(jsonFields.has(field) ? `${field} = $${paramCount}::jsonb` : `${field} = $${paramCount}`);
     values.push(value);
     paramCount++;
   }

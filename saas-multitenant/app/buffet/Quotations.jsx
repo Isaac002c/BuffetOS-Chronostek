@@ -258,7 +258,7 @@ async function generateQuotationPDF(quotation, clientName, tenantCompany = {}, p
           ? Math.min(baseLineH, Math.max(s(12), (maxBoxH - padTop - padBot) / rawLines.length))
           : baseLineH;
         const itemSize  = Math.max(s(7), Math.min(s(11), lineH * 0.5));
-        const boxH      = rawLines.length * lineH + padTop + padBot;
+        const boxH      = Math.min(rawLines.length * lineH + padTop + padBot, maxBoxH);
         const boxY      = pageH - titleBarH - s(28) - boxH;
 
         // Caixa de fundo dourado claro com borda dourada
@@ -287,7 +287,7 @@ async function generateQuotationPDF(quotation, clientName, tenantCompany = {}, p
         const total = Number(quotation.total_amount || 0);
         const totalLabel = 'Valor Total da Proposta';
         const totalValue = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        const totalBlockY = boxY - s(56);
+        const totalBlockY = footerH + s(8);
 
         extraPage.drawRectangle({
           x: marg - s(12), y: totalBlockY, width: inner + s(24), height: totalH, color: cGold,
