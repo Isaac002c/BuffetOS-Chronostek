@@ -485,6 +485,19 @@ const LOCAL_TEMPLATES = {
     },
   ],
 
+    {
+      id:          'local-proposta-personalizada',
+      name:        'Proposta Personalizada',
+      description: 'Proposta com itens livres — adicione os itens manualmente. O PDF exportado usa a identidade visual da Valéria Rios Buffet com lista de itens, valor total e validade de 30 dias.',
+      emoji:       '📋',
+      accentColor: '#78471a',
+      bgColor:     '#fdf4e7',
+      pdfTemplate: null,
+      defaults:    { event_type: 'Proposta Personalizada', guest_count: 0 },
+      items:       [],
+    },
+  ],
+
   // ── Adicione outros tenants abaixo ──────────────────────────────────────────
   // 'nome do tenant em minúsculas': [ { id, name, description, emoji, accentColor, bgColor, defaults, items } ],
 };
