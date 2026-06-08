@@ -216,7 +216,10 @@ async function generateQuotationPDF(quotation, clientName, tenantCompany = {}, p
       // ── Página extra: Itens do Cardápio — identidade visual da proposta ─────────
       if (quotation.buffet_menu && quotation.buffet_menu.trim()) {
         const { rgb: _rgb } = await import('pdf-lib');
-        const pageW = 595.28, pageH = 841.89;
+        const templatePage = pdfDoc.getPages()[0];
+        const { width: pageW, height: pageH } = templatePage.getSize();
+        const scale = Math.min(pageW / 595.28, pageH / 841.89);
+        const s = (value) => value * scale;
         const extraPage = pdfDoc.addPage([pageW, pageH]);
         const fontR = await pdfDoc.embedFont(StandardFonts.Helvetica);
         const fontB = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -225,39 +228,46 @@ async function generateQuotationPDF(quotation, clientName, tenantCompany = {}, p
         const cBege   = _rgb(0.910, 0.863, 0.816);  // fundo bege #E8DCCC
         const cGold   = _rgb(0.780, 0.576, 0.216);  // dourado  #C79337
         const cDark   = _rgb(0.212, 0.145, 0.086);  // marrom escuro #362517
-        const cWhite  = _rgb(1, 1, 1);
         const cGoldLt = _rgb(0.973, 0.941, 0.878);  // dourado claríssimo para caixa
-        const marg = 48;
+        const marg = s(48);
         const inner = pageW - marg * 2;
 
         // Fundo bege completo
         extraPage.drawRectangle({ x: 0, y: 0, width: pageW, height: pageH, color: cBege });
 
         // Faixa dourada do título (estilo "Informações Importantes")
-        const titleBarH = 72;
+        const titleBarH = s(72);
         extraPage.drawRectangle({ x: 0, y: pageH - titleBarH, width: pageW, height: titleBarH, color: cGold });
         const titleText = 'Itens do Cardápio';
-        const titleW = fontB.widthOfTextAtSize(titleText, 22);
+        const titleSize = s(22);
+        const titleW = fontB.widthOfTextAtSize(titleText, titleSize);
         extraPage.drawText(titleText, {
-          x: (pageW - titleW) / 2, y: pageH - titleBarH + 24,
-          size: 22, font: fontB, color: cDark,
+          x: (pageW - titleW) / 2, y: pageH - titleBarH + s(24),
+          size: titleSize, font: fontB, color: cDark,
         });
 
         // Linhas do cardápio com espaçamento generoso
         const rawLines  = quotation.buffet_menu.split('\n').filter(l => l.trim());
-        const lineH     = 22;   // espaçamento maior entre itens
-        const padTop    = 28;
-        const padBot    = 20;
+        const footerH   = s(32);
+        const totalH    = s(44);
+        const padTop    = s(28);
+        const padBot    = s(20);
+        const maxBoxH   = pageH - titleBarH - s(28) - totalH - s(56) - footerH;
+        const baseLineH = s(20);
+        const lineH     = rawLines.length > 0
+          ? Math.min(baseLineH, Math.max(s(12), (maxBoxH - padTop - padBot) / rawLines.length))
+          : baseLineH;
+        const itemSize  = Math.max(s(7), Math.min(s(11), lineH * 0.5));
         const boxH      = rawLines.length * lineH + padTop + padBot;
-        const boxY      = pageH - titleBarH - 28 - boxH;
+        const boxY      = pageH - titleBarH - s(28) - boxH;
 
         // Caixa de fundo dourado claro com borda dourada
         extraPage.drawRectangle({
-          x: marg - 12, y: boxY, width: inner + 24, height: boxH,
+          x: marg - s(12), y: boxY, width: inner + s(24), height: boxH,
           color: cGoldLt,
         });
         extraPage.drawRectangle({
-          x: marg - 12, y: boxY, width: 5, height: boxH, color: cGold,
+          x: marg - s(12), y: boxY, width: s(5), height: boxH, color: cGold,
         });
 
         // Itens
@@ -269,7 +279,7 @@ async function generateQuotationPDF(quotation, clientName, tenantCompany = {}, p
           const textY = boxY + boxH - padTop - i * lineH;
           extraPage.drawText(safeText, {
             x: marg, y: textY,
-            size: 11, font: fontR, color: cDark, maxWidth: inner - 8,
+            size: itemSize, font: fontR, color: cDark, maxWidth: inner - s(8),
           });
         });
 
@@ -277,23 +287,24 @@ async function generateQuotationPDF(quotation, clientName, tenantCompany = {}, p
         const total = Number(quotation.total_amount || 0);
         const totalLabel = 'Valor Total da Proposta';
         const totalValue = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-        const totalBlockY = boxY - 56;
+        const totalBlockY = boxY - s(56);
 
         extraPage.drawRectangle({
-          x: marg - 12, y: totalBlockY, width: inner + 24, height: 44, color: cGold,
+          x: marg - s(12), y: totalBlockY, width: inner + s(24), height: totalH, color: cGold,
         });
         extraPage.drawText(totalLabel, {
-          x: marg, y: totalBlockY + 28, size: 10, font: fontR, color: cDark,
+          x: marg, y: totalBlockY + s(28), size: s(10), font: fontR, color: cDark,
         });
         extraPage.drawText(totalValue, {
-          x: marg, y: totalBlockY + 12, size: 16, font: fontB, color: cDark,
+          x: marg, y: totalBlockY + s(12), size: s(16), font: fontB, color: cDark,
         });
 
         // Rodapé bege com nome do buffet centralizado
-        extraPage.drawRectangle({ x: 0, y: 0, width: pageW, height: 32, color: cGold });
-        const footerW = fontR.widthOfTextAtSize(co.name, 9);
+        extraPage.drawRectangle({ x: 0, y: 0, width: pageW, height: footerH, color: cGold });
+        const footerSize = s(9);
+        const footerW = fontR.widthOfTextAtSize(co.name, footerSize);
         extraPage.drawText(co.name, {
-          x: (pageW - footerW) / 2, y: 11, size: 9, font: fontB, color: cDark,
+          x: (pageW - footerW) / 2, y: s(11), size: footerSize, font: fontB, color: cDark,
         });
       }
 
@@ -762,6 +773,19 @@ const emptyVariableCost = {
   pass_to_client: false,
   pass_margin:    40,
   pass_label:     '',
+};
+
+const toArrayField = (value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
 };
 
 const FIXED_COST_CATEGORIES    = ['logística','equipe','aluguel','taxas','embalagem','outros'];
@@ -2908,8 +2932,8 @@ export default function BuffetQuotations({ isActive }) {
     setItems(loadedItems.length > 0 ? loadedItems : [{ ...emptyItem }]);
 
     // Carrega custos fixos e variáveis — fallback seguro para orçamentos antigos
-    setFixedCosts(Array.isArray(full.fixed_costs)    ? full.fixed_costs    : []);
-    setVariableCosts(Array.isArray(full.variable_costs) ? full.variable_costs : []);
+    setFixedCosts(toArrayField(full.fixed_costs));
+    setVariableCosts(toArrayField(full.variable_costs));
 
     setView('builder');
   };

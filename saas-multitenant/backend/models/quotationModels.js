@@ -1,11 +1,123 @@
 const pool = require('../config/db');
 
-function computeQuotationTotal(items = []) {
-  return items.reduce((sum, item) => {
-    const quantity = Number(item.quantity) || 1;
-    const price = Number(item.price || item.unit_price || 0);
+function safeNumber(value, fallback = 0) {
+  if (value === '' || value === null || value === undefined) return fallback;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function normalizeCostArray(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function safeJSON(value) {
+  return JSON.stringify(normalizeCostArray(value));
+}
+
+function priceFromMargin(cost, marginPct) {
+  const amount = safeNumber(cost);
+  const margin = safeNumber(marginPct);
+  if (margin >= 100) return 0;
+  if (margin <= 0) return amount;
+  return amount / (1 - margin / 100);
+}
+
+function shouldPassToClient(cost) {
+  return (
+    cost.pass_to_client === true ||
+    cost.pass_to_client === 'true' ||
+    cost.pass_to_client === 1 ||
+    cost.pass_to_client === '1'
+  );
+}
+
+function computeQuotationTotal({
+  items = [],
+  fixed_costs = [],
+  variable_costs = [],
+  discount_percent = 0,
+  guest_count = 0,
+} = {}) {
+  const subtotal = items.reduce((sum, item) => {
+    const quantity = safeNumber(item.quantity, 1);
+    const price = safeNumber(item.price ?? item.unit_price);
     return sum + price * quantity;
   }, 0);
+
+  const discount = subtotal * (safeNumber(discount_percent) / 100);
+  const itemRevenue = subtotal - discount;
+  const guests = safeNumber(guest_count);
+
+  const fixedPass = normalizeCostArray(fixed_costs).reduce((sum, cost) => {
+    if (!shouldPassToClient(cost)) return sum;
+    return sum + priceFromMargin(safeNumber(cost.amount), cost.pass_margin);
+  }, 0);
+
+  const variablePass = normalizeCostArray(variable_costs).reduce((sum, cost) => {
+    if (!shouldPassToClient(cost)) return sum;
+    const amount = safeNumber(cost.amount);
+    const effectiveAmount = cost.calc_type === 'per_person' ? amount * guests : amount;
+    return sum + priceFromMargin(effectiveAmount, cost.pass_margin);
+  }, 0);
+
+  return Math.round((itemRevenue + fixedPass + variablePass) * 100) / 100;
+}
+
+function quotationTotalFromData(data) {
+  return computeQuotationTotal({
+    items: data.items || [],
+    fixed_costs: data.fixed_costs || [],
+    variable_costs: data.variable_costs || [],
+    discount_percent: data.discount_percent,
+    guest_count: data.guest_count,
+  });
+}
+
+function itemPayload(item) {
+  const quantity = safeNumber(item.quantity, 1);
+  const unitPrice = safeNumber(item.price ?? item.unit_price);
+
+  return {
+    itemName: item.name || item.item_name || 'Item',
+    quantity,
+    unitPrice,
+    subtotal: unitPrice * quantity,
+    sheetId: item.sheet_id || null,
+    sheetCost: safeNumber(item.sheet_cost),
+  };
+}
+
+async function insertQuotationItems(client, quotationId, tenantId, items = []) {
+  if (!Array.isArray(items) || items.length === 0) return;
+
+  const itemQuery = `
+    INSERT INTO quotation_items
+      (tenant_id, quotation_id, item_name, quantity, unit_price, subtotal, sheet_id, sheet_cost)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+  `;
+
+  for (const item of items) {
+    const payload = itemPayload(item);
+    await client.query(itemQuery, [
+      tenantId,
+      quotationId,
+      payload.itemName,
+      payload.quantity,
+      payload.unitPrice,
+      payload.subtotal,
+      payload.sheetId,
+      payload.sheetCost,
+    ]);
+  }
 }
 
 async function createQuotation({
@@ -13,10 +125,15 @@ async function createQuotation({
   items = [], notes = '', buffet_menu = '', tenant_id, discount_percent = 0,
   fixed_costs = [], variable_costs = [], default_margin = 40,
 }) {
-  const subtotal = computeQuotationTotal(items);
-  const total = subtotal * (1 - (Number(discount_percent) || 0) / 100);
-
-  const safeJSON = (v) => (Array.isArray(v) ? JSON.stringify(v) : '[]');
+  const normalizedFixedCosts = normalizeCostArray(fixed_costs);
+  const normalizedVariableCosts = normalizeCostArray(variable_costs);
+  const total = quotationTotalFromData({
+    items,
+    fixed_costs: normalizedFixedCosts,
+    variable_costs: normalizedVariableCosts,
+    discount_percent,
+    guest_count,
+  });
 
   const client = await pool.connect();
   try {
@@ -34,42 +151,22 @@ async function createQuotation({
     const result = await client.query(query, [
       tenant_id,
       client_id || null,
-      lead_id   || null,
+      lead_id || null,
       event_type,
-      guest_count,
+      safeNumber(guest_count),
       event_date || null,
       total,
       'draft',
       notes,
       buffet_menu || '',
-      Number(discount_percent) || 0,
-      safeJSON(fixed_costs),
-      safeJSON(variable_costs),
-      Number(default_margin) ?? 40,
+      safeNumber(discount_percent),
+      safeJSON(normalizedFixedCosts),
+      safeJSON(normalizedVariableCosts),
+      safeNumber(default_margin, 40),
     ]);
 
     const quotationId = result.rows[0].id;
-
-    if (items.length > 0) {
-      const itemQuery = `
-        INSERT INTO quotation_items
-          (tenant_id, quotation_id, item_name, quantity, unit_price, subtotal, sheet_id, sheet_cost)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      `;
-
-      for (const item of items) {
-        const itemName  = item.name || item.item_name || 'Item';
-        const quantity  = Number(item.quantity)  || 1;
-        const unitPrice = Number(item.price || item.unit_price || 0);
-        const sheetId   = item.sheet_id   || null;
-        const sheetCost = Number(item.sheet_cost) || 0;
-        await client.query(itemQuery, [
-          tenant_id, quotationId,
-          itemName, quantity, unitPrice, unitPrice * quantity,
-          sheetId, sheetCost,
-        ]);
-      }
-    }
+    await insertQuotationItems(client, quotationId, tenant_id, items);
 
     await client.query('COMMIT');
     return result.rows[0];
@@ -108,7 +205,7 @@ async function getQuotationsByClient(client_id, tenant_id) {
 
 async function getQuotationDetail(quotationId, tenant_id) {
   const quotationQuery = 'SELECT * FROM quotations WHERE id = $1 AND tenant_id = $2';
-  const itemsQuery = `SELECT * FROM quotation_items WHERE quotation_id = $1 AND tenant_id = $2 ORDER BY id`;
+  const itemsQuery = 'SELECT * FROM quotation_items WHERE quotation_id = $1 AND tenant_id = $2 ORDER BY id';
 
   const [quotationResult, itemsResult] = await Promise.all([
     pool.query(quotationQuery, [quotationId, tenant_id]),
@@ -121,80 +218,94 @@ async function getQuotationDetail(quotationId, tenant_id) {
 
   return {
     ...quotationResult.rows[0],
+    fixed_costs: normalizeCostArray(quotationResult.rows[0].fixed_costs),
+    variable_costs: normalizeCostArray(quotationResult.rows[0].variable_costs),
     items: itemsResult.rows,
   };
 }
 
 async function updateQuotation(quotationId, data, tenant_id) {
-  if (Array.isArray(data.items)) {
-    const subtotal = computeQuotationTotal(data.items);
-    const pct = Number(data.discount_percent) || 0;
-    data.total_amount = subtotal * (1 - pct / 100);
+  const updateData = { ...data };
+
+  if (Array.isArray(updateData.items)) {
+    updateData.fixed_costs = normalizeCostArray(updateData.fixed_costs);
+    updateData.variable_costs = normalizeCostArray(updateData.variable_costs);
+    updateData.total_amount = quotationTotalFromData(updateData);
   }
 
   const fields = [];
   const values = [];
   let paramCount = 1;
 
-  const updatableFields = ['client_id', 'lead_id', 'event_type', 'guest_count', 'event_date', 'total_amount', 'status', 'notes', 'buffet_menu', 'validity_days', 'discount_percent', 'fixed_costs', 'variable_costs', 'default_margin'];
-  // Campos que não podem ser string vazia no PostgreSQL — converte para null
-  const nullableFields  = new Set(['client_id', 'lead_id', 'event_date']);
+  const updatableFields = [
+    'client_id',
+    'lead_id',
+    'event_type',
+    'guest_count',
+    'event_date',
+    'total_amount',
+    'status',
+    'notes',
+    'buffet_menu',
+    'validity_days',
+    'discount_percent',
+    'fixed_costs',
+    'variable_costs',
+    'default_margin',
+  ];
+  const nullableFields = new Set(['client_id', 'lead_id', 'event_date']);
+  const jsonFields = new Set(['fixed_costs', 'variable_costs']);
 
   for (const field of updatableFields) {
-    if (Object.prototype.hasOwnProperty.call(data, field)) {
-      const raw   = data[field];
-      const value = nullableFields.has(field) && (raw === '' || raw === undefined) ? null : raw;
-      fields.push(`${field} = $${paramCount}`);
-      values.push(value);
-      paramCount++;
-    }
+    if (!Object.prototype.hasOwnProperty.call(updateData, field)) continue;
+
+    const raw = updateData[field];
+    let value = nullableFields.has(field) && (raw === '' || raw === undefined) ? null : raw;
+
+    if (jsonFields.has(field)) value = safeJSON(raw);
+    if (field === 'guest_count' || field === 'discount_percent' || field === 'total_amount') value = safeNumber(raw);
+    if (field === 'default_margin') value = safeNumber(raw, 40);
+
+    fields.push(`${field} = $${paramCount}`);
+    values.push(value);
+    paramCount++;
   }
 
-  if (fields.length > 0) {
-    values.push(quotationId, tenant_id);
-    const query = `
-      UPDATE quotations
-      SET ${fields.join(', ')}, updated_at = NOW()
-      WHERE id = $${paramCount} AND tenant_id = $${paramCount + 1}
-      RETURNING *
-    `;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-    const result = await pool.query(query, values);
-    if (result.rows.length === 0) {
-      return null;
-    }
-  }
-
-  if (Array.isArray(data.items)) {
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      await client.query('DELETE FROM quotation_items WHERE quotation_id = $1 AND tenant_id = $2', [quotationId, tenant_id]);
-      const itemQuery = `
-        INSERT INTO quotation_items
-          (tenant_id, quotation_id, item_name, quantity, unit_price, subtotal, sheet_id, sheet_cost)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    if (fields.length > 0) {
+      values.push(quotationId, tenant_id);
+      const query = `
+        UPDATE quotations
+        SET ${fields.join(', ')}, updated_at = NOW()
+        WHERE id = $${paramCount} AND tenant_id = $${paramCount + 1}
+        RETURNING *
       `;
-      for (const item of data.items) {
-        const itemName  = item.name || item.item_name || 'Item';
-        const quantity  = Number(item.quantity)  || 1;
-        const unitPrice = Number(item.price || item.unit_price || 0);
-        const sheetId   = item.sheet_id   || null;
-        const sheetCost = Number(item.sheet_cost) || 0;
-        await client.query(itemQuery, [
-          tenant_id, quotationId,
-          itemName, quantity, unitPrice, unitPrice * quantity,
-          sheetId, sheetCost,
-        ]);
+
+      const result = await client.query(query, values);
+      if (result.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return null;
       }
-      await client.query('COMMIT');
-    } catch (error) {
-      await client.query('ROLLBACK');
-      console.error('Error updating quotation items:', error);
-      throw error;
-    } finally {
-      client.release();
     }
+
+    if (Array.isArray(updateData.items)) {
+      await client.query(
+        'DELETE FROM quotation_items WHERE quotation_id = $1 AND tenant_id = $2',
+        [quotationId, tenant_id]
+      );
+      await insertQuotationItems(client, quotationId, tenant_id, updateData.items);
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error updating quotation:', error);
+    throw error;
+  } finally {
+    client.release();
   }
 
   return getQuotationDetail(quotationId, tenant_id);
@@ -217,22 +328,23 @@ async function duplicateQuotation(quotationId, tenant_id, clientId, leadId) {
 
   const newQuotation = await createQuotation({
     tenant_id,
-    client_id:       clientId !== undefined ? clientId : original.client_id,
-    lead_id:         leadId   !== undefined ? leadId   : original.lead_id,
-    event_type:      original.event_type,
-    guest_count:     original.guest_count,
-    event_date:      original.event_date,
-    notes:           original.notes,
-    discount_percent: Number(original.discount_percent) || 0,
-    fixed_costs:     Array.isArray(original.fixed_costs)    ? original.fixed_costs    : [],
-    variable_costs:  Array.isArray(original.variable_costs) ? original.variable_costs : [],
-    default_margin:  Number(original.default_margin) || 40,
+    client_id: clientId !== undefined ? clientId : original.client_id,
+    lead_id: leadId !== undefined ? leadId : original.lead_id,
+    event_type: original.event_type,
+    guest_count: original.guest_count,
+    event_date: original.event_date,
+    notes: original.notes,
+    buffet_menu: original.buffet_menu || '',
+    discount_percent: safeNumber(original.discount_percent),
+    fixed_costs: normalizeCostArray(original.fixed_costs),
+    variable_costs: normalizeCostArray(original.variable_costs),
+    default_margin: safeNumber(original.default_margin, 40),
     items: original.items.map((item) => ({
-      item_name:  item.item_name,
-      quantity:   item.quantity,
+      item_name: item.item_name,
+      quantity: item.quantity,
       unit_price: item.unit_price,
-      sheet_id:   item.sheet_id   || null,
-      sheet_cost: Number(item.sheet_cost) || 0,
+      sheet_id: item.sheet_id || null,
+      sheet_cost: safeNumber(item.sheet_cost),
     })),
   });
 
@@ -245,9 +357,7 @@ async function setQuotationStatus(quotationId, status, tenant_id) {
     return null;
   }
 
-  const subtotal = computeQuotationTotal(quotation.items);
-  const pct = Number(quotation.discount_percent) || 0;
-  const total = subtotal * (1 - pct / 100);
+  const total = quotationTotalFromData(quotation);
   const result = await pool.query(
     `UPDATE quotations
      SET status = $1,
