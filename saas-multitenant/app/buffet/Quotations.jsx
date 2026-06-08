@@ -382,22 +382,28 @@ function _buildDefaultTable(doc, quotation, clientName, co, fmtBRL, fmtDate) {
   doc.text(fmtBRL(total), W - margin - 2, y + 6, { align: 'right' });
   y += 18;
 
-  // ── Cardápio / Itens do Buffet (opcional) ────────────────────────────────────
+  // ── Cardápio / Itens do Buffet — caixa de nota (opcional) ───────────────────
   if (quotation.buffet_menu) {
-    doc.setDrawColor(...BORDER);
-    doc.line(margin, y, W - margin, y);
-    y += 6;
+    y += 4;
+    const menuLines = doc.splitTextToSize(quotation.buffet_menu, W - 2 * margin - 16);
+    const boxH = menuLines.length * 5 + 16;
+    // Fundo azul claro
+    doc.setFillColor(239, 246, 255);
+    doc.roundedRect(margin, y, W - 2 * margin, boxH, 3, 3, 'F');
+    // Borda esquerda azul (destaque de nota)
+    doc.setFillColor(...PRIMARY);
+    doc.rect(margin, y, 3, boxH, 'F');
+    // Título
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(...GRAY);
-    doc.text('CARDÁPIO / ITENS DO BUFFET', margin, y);
-    y += 5;
+    doc.setFontSize(7.5);
+    doc.setTextColor(...PRIMARY);
+    doc.text('CARDÁPIO / O QUE SERÁ SERVIDO', margin + 8, y + 6);
+    // Conteúdo
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(...DARK);
-    const menuLines = doc.splitTextToSize(quotation.buffet_menu, W - 2 * margin);
-    doc.text(menuLines, margin, y);
-    y += menuLines.length * 5 + 4;
+    doc.text(menuLines, margin + 8, y + 12);
+    y += boxH + 6;
   }
 
   // ── Notes ────────────────────────────────────────────────────────────────────
@@ -2033,37 +2039,75 @@ function QuotationBuilder({
                 />
               </div>
               <div style={{ gridColumn: '1 / -1' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <label style={{ ...S.label, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span>🍽️ Cardápio / Itens do Buffet</span>
-                    <span style={{ fontSize: 11, fontWeight: 400, color: '#94a3b8' }}>— opcional, aparece na proposta quando preenchido</span>
-                  </label>
-                  {items.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const texto = items
-                          .filter(i => i.item_name?.trim())
-                          .map(i => `• ${i.item_name.trim()} (${Number(i.quantity) || 1}x)`)
-                          .join('\n');
-                        onFieldChange('buffet_menu', texto);
-                      }}
-                      style={{
-                        padding: '4px 12px', borderRadius: 8, border: '1px solid #3b82f620',
-                        background: '#eff6ff', color: '#2563eb',
-                        fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
-                      }}
-                    >
-                      ↑ Importar itens do evento
-                    </button>
-                  )}
+                {/* Toggle de nota de cardápio */}
+                <div
+                  onClick={() => {
+                    if (form.buffet_menu) {
+                      onFieldChange('buffet_menu', '');
+                    } else {
+                      // Se já tem itens, importa automaticamente; senão abre vazio
+                      const auto = items.filter(i => i.item_name?.trim())
+                        .map(i => `• ${i.item_name.trim()} (${Number(i.quantity) || 1}x)`)
+                        .join('\n');
+                      onFieldChange('buffet_menu', auto || ' ');
+                    }
+                  }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
+                    padding: '10px 14px', borderRadius: 10, userSelect: 'none',
+                    border: `1px solid ${form.buffet_menu ? '#3b82f6' : '#e2e8f0'}`,
+                    background: form.buffet_menu ? '#eff6ff' : '#f8fafc',
+                    marginBottom: form.buffet_menu ? 8 : 0,
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  <span style={{ fontSize: 16 }}>{form.buffet_menu ? '📋' : '📋'}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: form.buffet_menu ? '#2563eb' : '#475569' }}>
+                      Incluir cardápio na proposta
+                    </div>
+                    <div style={{ fontSize: 11, color: '#94a3b8' }}>
+                      {form.buffet_menu ? 'Aparecerá como nota na proposta PDF' : 'Opcional — adiciona uma nota com os itens do buffet'}
+                    </div>
+                  </div>
+                  <div style={{
+                    width: 36, height: 20, borderRadius: 10,
+                    background: form.buffet_menu ? '#2563eb' : '#cbd5e1',
+                    position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+                  }}>
+                    <div style={{
+                      width: 14, height: 14, borderRadius: '50%', background: '#fff',
+                      position: 'absolute', top: 3,
+                      left: form.buffet_menu ? 18 : 3,
+                      transition: 'left 0.2s',
+                    }} />
+                  </div>
                 </div>
-                <textarea
-                  value={form.buffet_menu}
-                  onChange={e => onFieldChange('buffet_menu', e.target.value)}
-                  placeholder={"Ex:\n• Coquetel de entrada: bruschetas, mini-quiches, canapés\n• Prato principal: risoto de camarão, filé ao molho madeira\n• Sobremesas: pudim, petit gateau, frutas da estação\n• Open bar: refrigerantes, sucos, espumante"}
-                  style={{ ...S.input, minHeight: 110, resize: 'vertical', fontFamily: 'inherit' }}
-                />
+
+                {form.buffet_menu && (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+                      {items.length > 0 && (
+                        <button type="button" onClick={() => {
+                          const texto = items.filter(i => i.item_name?.trim())
+                            .map(i => `• ${i.item_name.trim()} (${Number(i.quantity) || 1}x)`)
+                            .join('\n');
+                          onFieldChange('buffet_menu', texto);
+                        }} style={{
+                          padding: '3px 10px', borderRadius: 7, border: '1px solid #3b82f620',
+                          background: '#eff6ff', color: '#2563eb',
+                          fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                        }}>↑ Importar itens do evento</button>
+                      )}
+                    </div>
+                    <textarea
+                      value={form.buffet_menu}
+                      onChange={e => onFieldChange('buffet_menu', e.target.value)}
+                      placeholder={"Ex:\n• Coquetel de entrada: bruschetas, mini-quiches, canapés\n• Prato principal: risoto de camarão, filé ao molho madeira\n• Sobremesas: pudim, petit gateau, frutas da estação\n• Open bar: refrigerantes, sucos, espumante"}
+                      style={{ ...S.input, minHeight: 110, resize: 'vertical', fontFamily: 'inherit' }}
+                    />
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -2460,13 +2504,19 @@ export default function BuffetQuotations({ isActive }) {
       .catch(() => {});
   }, []);
 
-  // Recarrega leads sempre que a aba ficar ativa — garante que leads criados
-  // em outras abas apareçam sem precisar de F5 (CachedTabs mantém em memória)
+  // Recarrega leads sempre que a aba ficar ativa (CachedTabs mantém em memória)
   useEffect(() => {
     if (isActive) {
       getLeads().then(setLeads).catch(() => {});
     }
   }, [isActive]);
+
+  // Recarrega leads imediatamente quando Leads.jsx cria/edita um lead
+  useEffect(() => {
+    const handler = () => getLeads().then(setLeads).catch(() => {});
+    window.addEventListener('leads-updated', handler);
+    return () => window.removeEventListener('leads-updated', handler);
+  }, []);
 
   const loadData = async () => {
     setLoading(true);

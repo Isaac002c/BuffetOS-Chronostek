@@ -294,6 +294,7 @@ export default function BuffetLeads() {
         const res = await createLead(payload);
         savedId = res?.data?.id || res?.id;
       }
+      window.dispatchEvent(new CustomEvent('leads-updated'));
       reset();
       await loadData();
       // Se fechou o lead, oferecer criação de evento
