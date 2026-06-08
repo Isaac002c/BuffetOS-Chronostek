@@ -147,7 +147,7 @@ const PDF_PRICE_OVERLAYS = {
 //                       e baixa o PDF sem nenhuma página extra.
 // Sem pdfTemplatePath: gera o PDF padrão do CRM (jsPDF azul).
 
-async function generateQuotationPDF(quotation, clientName, tenantCompany = {}, pdfTemplatePath = null) {
+async function generateQuotationPDF(quotation, clientName, tenantCompany = {}, pdfTemplatePath = null, useBrandedStyle = false) {
   const { jsPDF } = await import('jspdf');
 
   const co = {
@@ -322,6 +322,125 @@ async function generateQuotationPDF(quotation, clientName, tenantCompany = {}, p
       return;
     } catch (err) {
       console.warn('[PDF] Template overlay falhou, usando jsPDF padrão:', err.message);
+    }
+  }
+
+  // ── Modo BRANDED STANDALONE: identidade visual da Valéria sem template base ──
+  // Acionado quando o tenant tem templates mas o event_type não encontrou match.
+  if (useBrandedStyle) {
+    try {
+      const { PDFDocument, rgb, StandardFonts } = await import('pdf-lib');
+
+      const pageW = 595.28, pageH = 841.89;
+      const s = (v) => v;
+
+      const sanitize = (t) => (t || '').replace(/[^\x00-\xFF]/g, (c) => {
+        const map = { 'ç':'c','ã':'a','õ':'o','â':'a','ê':'e','ô':'o','í':'i','ú':'u','á':'a','é':'e','ó':'o','à':'a','ü':'u','ñ':'n','Ç':'C','Ã':'A','Õ':'O','Â':'A','Ê':'E','Ô':'O','Í':'I','Ú':'U','Á':'A','É':'E','Ó':'O','À':'A','Ü':'U','Ñ':'N' };
+        return map[c] || ' ';
+      });
+
+      // Monta linhas a partir dos itens da proposta
+      const qItems = Array.isArray(quotation.items) ? quotation.items : [];
+      let rawLines = qItems.length > 0
+        ? qItems.map(it => sanitize(`${it.item_name || 'Item'} (${Number(it.quantity || 1)}x)`))
+        : (quotation.buffet_menu || '').split('\n').filter(l => l.trim()).map(sanitize);
+
+      // Paleta
+      const cBege   = rgb(0.910, 0.863, 0.816);
+      const cGold   = rgb(0.780, 0.576, 0.216);
+      const cDark   = rgb(0.212, 0.145, 0.086);
+      const cGoldLt = rgb(0.973, 0.941, 0.878);
+
+      const marg      = 48;
+      const inner     = pageW - marg * 2;
+      const titleBarH = 72;
+      const footerH   = 32;
+      const totalH    = 60;
+      const padTop    = 28;
+      const padBot    = 20;
+      const baseLineH = 20;
+      const maxBoxH   = pageH - titleBarH - 28 - totalH - 56 - footerH;
+      // Divide em páginas se necessário
+      const linesPerPage = Math.max(1, Math.floor((maxBoxH - padTop - padBot) / baseLineH));
+      const chunks = [];
+      for (let i = 0; i < Math.max(rawLines.length, 1); i += linesPerPage) {
+        chunks.push(rawLines.slice(i, i + linesPerPage));
+      }
+
+      const pdfDoc = await PDFDocument.create();
+      const fontR = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const fontB = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+      for (let pi = 0; pi < chunks.length; pi++) {
+        const isLast = pi === chunks.length - 1;
+        const chunk  = chunks[pi];
+        const pg     = pdfDoc.addPage([pageW, pageH]);
+
+        // Fundo bege
+        pg.drawRectangle({ x: 0, y: 0, width: pageW, height: pageH, color: cBege });
+
+        // Faixa dourada do título
+        pg.drawRectangle({ x: 0, y: pageH - titleBarH, width: pageW, height: titleBarH, color: cGold });
+        const titleTxt = pi === 0 ? sanitize(co.name) : sanitize(`${co.name} (cont.)`) ;
+        const subtitleTxt = pi === 0
+          ? `${sanitize(clientName)}  |  ${sanitize(quotation.event_type || 'Proposta')}`
+          : '';
+        const titleW = fontB.widthOfTextAtSize(titleTxt, 18);
+        pg.drawText(titleTxt, { x: (pageW - titleW) / 2, y: pageH - titleBarH + 38, size: 18, font: fontB, color: cDark });
+        if (subtitleTxt) {
+          const subW = fontR.widthOfTextAtSize(subtitleTxt, 11);
+          pg.drawText(subtitleTxt, { x: (pageW - subW) / 2, y: pageH - titleBarH + 18, size: 11, font: fontR, color: cDark });
+        }
+
+        // Cabeçalho "Itens do Cardápio"
+        const secH = 44;
+        const secY = pageH - titleBarH - secH;
+        pg.drawRectangle({ x: 0, y: secY, width: pageW, height: secH, color: cDark });
+        const secTxt = 'Itens do Cardapio';
+        const secW = fontB.widthOfTextAtSize(secTxt, 16);
+        pg.drawText(secTxt, { x: (pageW - secW) / 2, y: secY + 14, size: 16, font: fontB, color: cGold });
+
+        // Caixa de itens
+        const boxBot = isLast ? footerH + totalH + 12 : footerH + 12;
+        const boxTop = secY - 10;
+        const boxH   = boxTop - boxBot;
+        pg.drawRectangle({ x: marg - 12, y: boxBot, width: inner + 24, height: boxH, color: cGoldLt });
+        pg.drawRectangle({ x: marg - 12, y: boxBot, width: 5, height: boxH, color: cGold });
+
+        const lineH   = chunk.length > 0 ? Math.min(baseLineH, Math.max(13, (boxH - padTop - padBot) / chunk.length)) : baseLineH;
+        const itSize  = Math.max(8, Math.min(11, lineH * 0.55));
+        chunk.forEach((line, i) => {
+          pg.drawText(line, { x: marg, y: boxTop - padTop - i * lineH, size: itSize, font: fontR, color: cDark, maxWidth: inner - 8 });
+        });
+
+        // Bloco total (última página)
+        if (isLast) {
+          const totalBlockY = footerH + 8;
+          const totalValue = Number(quotation.total_amount || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+          pg.drawRectangle({ x: marg - 12, y: totalBlockY, width: inner + 24, height: totalH - 8, color: cGold });
+          pg.drawText('Valor Total da Proposta', { x: marg, y: totalBlockY + 36, size: 10, font: fontR, color: cDark });
+          pg.drawText(totalValue,               { x: marg, y: totalBlockY + 18, size: 20, font: fontB, color: cDark });
+          pg.drawText('Proposta valida por 30 dias.', { x: marg, y: totalBlockY + 5, size: 8, font: fontR, color: cDark });
+        }
+
+        // Rodapé
+        pg.drawRectangle({ x: 0, y: 0, width: pageW, height: footerH, color: cGold });
+        const footerTxt = sanitize(co.name);
+        const footerW   = fontR.widthOfTextAtSize(footerTxt, 9);
+        pg.drawText(footerTxt, { x: (pageW - footerW) / 2, y: 11, size: 9, font: fontB, color: cDark });
+      }
+
+      const bytes = await pdfDoc.save();
+      const blob  = new Blob([bytes], { type: 'application/pdf' });
+      const url   = URL.createObjectURL(blob);
+      const a     = document.createElement('a');
+      a.href     = url;
+      a.download = `proposta_${safeName}_${new Date().toISOString().split('T')[0]}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      return;
+    } catch (err) {
+      console.warn('[PDF] Branded standalone falhou, usando jsPDF:', err.message);
     }
   }
 
@@ -3068,16 +3187,19 @@ export default function BuffetQuotations({ isActive }) {
       // Resolve o PDF template:
       //   1º: activePdfTemplate (setado quando template foi selecionado nesta sessão)
       //   2º: busca no registro de templates pelo event_type da proposta
-      //       (garante funcionamento mesmo para propostas carregadas do banco)
+      const allTenantTemplates = getLocalTemplates(tenantInfo?.name);
       const resolvedPdfTemplate = activePdfTemplate || (() => {
-        const allTemplates = getLocalTemplates(tenantInfo?.name);
-        const match = allTemplates.find(
+        const match = allTenantTemplates.find(
           t => t.defaults?.event_type === full.event_type
         );
         return match?.pdfTemplate || null;
       })();
 
-      await generateQuotationPDF(full, clientName, tenantInfo, resolvedPdfTemplate);
+      // Usa o visual da Valéria (branded) quando o tenant tem templates
+      // mas o event_type não tem um template específico.
+      const useBrandedStyle = !resolvedPdfTemplate && allTenantTemplates.length > 0;
+
+      await generateQuotationPDF(full, clientName, tenantInfo, resolvedPdfTemplate, useBrandedStyle);
     } catch (e) {
       console.error('PDF error:', e);
       showMsg('error', 'Erro ao gerar PDF. Tente novamente.');
