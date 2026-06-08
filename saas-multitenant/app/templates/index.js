@@ -483,8 +483,6 @@ const LOCAL_TEMPLATES = {
       defaults:    { event_type: 'Festa Junina', guest_count: 20 },
       items:       festaJuninaItems,
     },
-  ],
-
     {
       id:          'local-proposta-personalizada',
       name:        'Proposta Personalizada',
