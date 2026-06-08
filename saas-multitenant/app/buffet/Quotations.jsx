@@ -3080,7 +3080,14 @@ export default function BuffetQuotations({ isActive }) {
         guestCount,
         defaultMargin,
       });
-      const finalTotal = Math.round(Math.max(fin.receitaTotal, fin.receitaRecomendada) * 100) / 100;
+      // Aplica receitaRecomendada ao total salvo apenas quando há custos internos
+      // definidos (fichas técnicas, custos fixos ou variáveis). Para propostas com
+      // itens manuais sem fichas (custoTotal = 0), o unit_price representa o preço
+      // de venda ao cliente e NÃO deve ser inflado pela margem automaticamente —
+      // a receitaRecomendada fica visível na sidebar como sugestão informativa.
+      const finalTotal = fin.custoTotal > 0
+        ? Math.round(Math.max(fin.receitaTotal, fin.receitaRecomendada) * 100) / 100
+        : Math.round(fin.receitaTotal * 100) / 100;
 
       const payload = {
         ...form,
@@ -3189,9 +3196,10 @@ export default function BuffetQuotations({ isActive }) {
         return match?.pdfTemplate || null;
       })();
 
-      // Usa o visual da Valéria (branded) quando o tenant tem templates
-      // mas o event_type não tem um template específico.
-      const useBrandedStyle = !resolvedPdfTemplate && allTenantTemplates.length > 0;
+      // Usa o visual dourado (branded standalone) SOMENTE quando há um pdfTemplate
+      // específico configurado. Para propostas sem template (ex: Proposta Personalizada),
+      // usa sempre o PDF azul corporativo (jsPDF) — visual limpo e com dados completos.
+      const useBrandedStyle = false;
 
       await generateQuotationPDF(full, clientName, tenantInfo, resolvedPdfTemplate, useBrandedStyle);
     } catch (e) {
