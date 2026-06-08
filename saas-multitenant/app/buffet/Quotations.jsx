@@ -213,6 +213,53 @@ async function generateQuotationPDF(quotation, clientName, tenantCompany = {}, p
         }
       }
 
+      // ── Página extra: Cardápio / O que será servido ──────────────────────────
+      if (quotation.buffet_menu && quotation.buffet_menu.trim()) {
+        const { rgb: _rgb, StandardFonts: SF } = await import('pdf-lib');
+        const pageW = 595.28, pageH = 841.89;
+        const extraPage = pdfDoc.addPage([pageW, pageH]);
+        const fontR = await pdfDoc.embedFont(StandardFonts.Helvetica);
+        const fontB = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+        const blue  = _rgb(0.149, 0.396, 0.871);   // #2563eb
+        const dark  = _rgb(0.09,  0.09,  0.09);
+        const marg  = 48;
+        const inner = pageW - marg * 2;
+
+        // Cabeçalho da página
+        extraPage.drawRectangle({ x: 0, y: pageH - 60, width: pageW, height: 60, color: blue });
+        extraPage.drawText('CARDÁPIO / O QUE SERÁ SERVIDO', {
+          x: marg, y: pageH - 36, size: 16, font: fontB, color: _rgb(1, 1, 1),
+        });
+
+        // Caixa de conteúdo
+        const lines = quotation.buffet_menu.split('\n');
+        const lineH = 16;
+        const boxH  = lines.length * lineH + 32;
+        const boxY  = pageH - 100 - boxH;
+
+        extraPage.drawRectangle({
+          x: marg - 8, y: boxY - 4, width: inner + 16, height: boxH + 8,
+          color: _rgb(0.937, 0.953, 1),  // azul muito claro
+        });
+        extraPage.drawRectangle({
+          x: marg - 8, y: boxY - 4, width: 4, height: boxH + 8, color: blue,
+        });
+
+        lines.forEach((line, i) => {
+          const safeText = (line || '').replace(/[^\x00-\xFF]/g, ' ');
+          extraPage.drawText(safeText, {
+            x: marg, y: boxY + boxH - 16 - i * lineH,
+            size: 11, font: fontR, color: dark, maxWidth: inner - 8,
+          });
+        });
+
+        // Rodapé
+        extraPage.drawRectangle({ x: 0, y: 0, width: pageW, height: 28, color: blue });
+        extraPage.drawText(co.name, {
+          x: marg, y: 10, size: 9, font: fontB, color: _rgb(1, 1, 1),
+        });
+      }
+
       const bytes = await pdfDoc.save();
       const blob  = new Blob([bytes], { type: 'application/pdf' });
       const url   = URL.createObjectURL(blob);
