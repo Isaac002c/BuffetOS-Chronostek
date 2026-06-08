@@ -123,9 +123,20 @@ export function calcFinancials({
   const lucroPessoa  = guests > 0 ? lucro / guests : 0;
 
   // ── PRECIFICAÇÃO INTELIGENTE ───────────────────────────────────────────────
-  // Receita recomendada = custo total / (1 - margem desejada)
-  // para atingir exatamente `dm`% de margem sobre o preço final
-  const receitaRecomendada   = dm < 100 ? custoTotal / (1 - dm / 100) : 0;
+  // Receita recomendada = base de custo / (1 - margem desejada)
+  //
+  // Cenário A — proposta com fichas técnicas / custos internos:
+  //   custoTotal > 0 → usa custoTotal como base (comportamento original)
+  //
+  // Cenário B — proposta com itens manuais sem fichas (ex.: Proposta Personalizada):
+  //   custoTotal = 0, receitaItens > 0 → usa receitaItens como custo implícito.
+  //   Nesse caso o unit_price representa o custo do item; a margem é aplicada
+  //   sobre esse valor para recomendar o preço de venda ao cliente.
+  //
+  // Cenário C — proposta vazia (sem itens e sem custos):
+  //   custoBase = 0 → receitaRecomendada = 0 (sem recomendação)
+  const custoBase = custoTotal > 0 ? custoTotal : receitaItens;
+  const receitaRecomendada   = dm < 100 && custoBase > 0 ? custoBase / (1 - dm / 100) : 0;
   const diferencaParaMargem  = receitaRecomendada - receitaTotal;
   const precoRecomendadoPessoa = guests > 0 && receitaRecomendada > 0 ? receitaRecomendada / guests : 0;
 

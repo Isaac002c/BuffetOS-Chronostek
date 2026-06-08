@@ -481,7 +481,7 @@ function _buildDefaultTable(doc, quotation, clientName, co, fmtBRL, fmtDate) {
   doc.setTextColor(...DARK);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
-  doc.text('PROPOSTA', margin, y);
+  doc.text('Proposta', margin, y);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(...GRAY);
