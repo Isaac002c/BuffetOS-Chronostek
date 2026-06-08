@@ -14,10 +14,13 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env'
 const { Pool } = require('pg');
 const bcrypt   = require('bcryptjs');
 
+if (!process.env.DATABASE_URL) {
+  console.error('ERRO: DATABASE_URL não definida. Execute com: node -r dotenv/config seed_valeria_buffet.js');
+  process.exit(1);
+}
+
 const pool = new Pool({
-  connectionString:
-    process.env.DATABASE_URL ||
-    'postgresql://neondb_owner:npg_0YMFJQUlk7xg@ep-odd-hill-aqunv9i6-pooler.c-8.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require',
+  connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
 });
 
