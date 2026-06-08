@@ -370,7 +370,7 @@ const festaJuninaItems = [
 // Chave = nome do tenant em minúsculas (case-insensitive)
 
 const LOCAL_TEMPLATES = {
-  'valeria rios buffet': [
+  'valéria rios buffet': [
     {
       id:          'local-ilha-gastronomica',
       name:        'Ilha Gastronômica',
@@ -493,7 +493,16 @@ const LOCAL_TEMPLATES = {
  * Retorna os templates locais para o tenant informado.
  * Retorna [] se não houver templates para esse tenant.
  */
+function normalizeKey(name) {
+  return name.toLowerCase().trim().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
 export function getLocalTemplates(tenantName) {
   if (!tenantName) return [];
-  return LOCAL_TEMPLATES[tenantName.toLowerCase().trim()] || [];
+  const key = tenantName.toLowerCase().trim();
+  // Tenta primeiro com acento exato, depois sem acento (compatibilidade)
+  return LOCAL_TEMPLATES[key]
+    || LOCAL_TEMPLATES[normalizeKey(tenantName)]
+    || Object.entries(LOCAL_TEMPLATES).find(([k]) => normalizeKey(k) === normalizeKey(tenantName))?.[1]
+    || [];
 }
