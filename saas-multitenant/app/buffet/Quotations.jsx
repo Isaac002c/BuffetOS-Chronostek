@@ -2033,10 +2033,31 @@ function QuotationBuilder({
                 />
               </div>
               <div style={{ gridColumn: '1 / -1' }}>
-                <label style={{ ...S.label, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span>🍽️ Cardápio / Itens do Buffet</span>
-                  <span style={{ fontSize: 11, fontWeight: 400, color: '#94a3b8' }}>— opcional, aparece na proposta quando preenchido</span>
-                </label>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <label style={{ ...S.label, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span>🍽️ Cardápio / Itens do Buffet</span>
+                    <span style={{ fontSize: 11, fontWeight: 400, color: '#94a3b8' }}>— opcional, aparece na proposta quando preenchido</span>
+                  </label>
+                  {items.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const texto = items
+                          .filter(i => i.item_name?.trim())
+                          .map(i => `• ${i.item_name.trim()} (${Number(i.quantity) || 1}x)`)
+                          .join('\n');
+                        onFieldChange('buffet_menu', texto);
+                      }}
+                      style={{
+                        padding: '4px 12px', borderRadius: 8, border: '1px solid #3b82f620',
+                        background: '#eff6ff', color: '#2563eb',
+                        fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      ↑ Importar itens do evento
+                    </button>
+                  )}
+                </div>
                 <textarea
                   value={form.buffet_menu}
                   onChange={e => onFieldChange('buffet_menu', e.target.value)}
