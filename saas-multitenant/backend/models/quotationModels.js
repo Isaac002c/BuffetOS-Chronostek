@@ -23,12 +23,13 @@ function safeJSON(value) {
   return JSON.stringify(normalizeCostArray(value));
 }
 
-function priceFromMargin(cost, marginPct) {
+// Preço de venda aplicando markup sobre o custo: preço = custo × (1 + markup%).
+// O campo persistido continua `pass_margin`, mas representa o markup em %.
+function priceFromMarkup(cost, markupPct) {
   const amount = safeNumber(cost);
-  const margin = safeNumber(marginPct);
-  if (margin >= 100) return 0;
-  if (margin <= 0) return amount;
-  return amount / (1 - margin / 100);
+  const markup = safeNumber(markupPct);
+  if (markup <= 0) return amount; // sem markup: repassa custo exato (markup não tem teto)
+  return amount * (1 + markup / 100);
 }
 
 function shouldPassToClient(cost) {
@@ -59,14 +60,14 @@ function computeQuotationTotal({
 
   const fixedPass = normalizeCostArray(fixed_costs).reduce((sum, cost) => {
     if (!shouldPassToClient(cost)) return sum;
-    return sum + priceFromMargin(safeNumber(cost.amount), cost.pass_margin);
+    return sum + priceFromMarkup(safeNumber(cost.amount), cost.pass_margin);
   }, 0);
 
   const variablePass = normalizeCostArray(variable_costs).reduce((sum, cost) => {
     if (!shouldPassToClient(cost)) return sum;
     const amount = safeNumber(cost.amount);
     const effectiveAmount = cost.calc_type === 'per_person' ? amount * guests : amount;
-    return sum + priceFromMargin(effectiveAmount, cost.pass_margin);
+    return sum + priceFromMarkup(effectiveAmount, cost.pass_margin);
   }, 0);
 
   return Math.round((itemRevenue + fixedPass + variablePass) * 100) / 100;
@@ -128,7 +129,7 @@ async function createQuotation({
 }) {
   const normalizedFixedCosts = normalizeCostArray(fixed_costs);
   const normalizedVariableCosts = normalizeCostArray(variable_costs);
-  // Honor explicit total_amount from frontend (already margin-corrected).
+  // Honor explicit total_amount from frontend (already markup-corrected).
   // Fall back to formula-based computation when not provided.
   const total = (total_amount !== undefined && safeNumber(total_amount) > 0)
     ? safeNumber(total_amount)
@@ -235,7 +236,7 @@ async function updateQuotation(quotationId, data, tenant_id) {
   if (Array.isArray(updateData.items)) {
     updateData.fixed_costs = normalizeCostArray(updateData.fixed_costs);
     updateData.variable_costs = normalizeCostArray(updateData.variable_costs);
-    // Honor explicit total_amount from frontend (already margin-corrected).
+    // Honor explicit total_amount from frontend (already markup-corrected).
     if (updateData.total_amount === undefined || updateData.total_amount === null) {
       updateData.total_amount = quotationTotalFromData(updateData);
     }
@@ -360,7 +361,7 @@ async function duplicateQuotation(quotationId, tenant_id, clientId, leadId) {
 }
 
 async function setQuotationStatus(quotationId, status, tenant_id) {
-  // Do not recompute total_amount — preserve the margin-corrected total saved by the user.
+  // Do not recompute total_amount — preserve the markup-corrected total saved by the user.
   const result = await pool.query(
     `UPDATE quotations
      SET status = $1,

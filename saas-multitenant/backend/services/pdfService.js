@@ -335,11 +335,11 @@ function generateProposalHTML(proposalData) {
           </div>
           ${margin_percentage > 0 ? `
           <div class="total-row">
-            <label>Margem (${margin_percentage}%):</label>
+            <label>Markup (${margin_percentage}%):</label>
             <span class="amount">R$ ${margin_amount.toFixed(2)}</span>
           </div>
           <div class="total-row">
-            <label>Preço com Margem:</label>
+            <label>Preço com Markup:</label>
             <span class="amount">R$ ${price_with_margin.toFixed(2)}</span>
           </div>
           ` : ''}

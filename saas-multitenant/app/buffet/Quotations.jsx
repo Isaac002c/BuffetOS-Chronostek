@@ -21,7 +21,7 @@ import {
   addTemplateItem, updateTemplateItem, deleteTemplateItem,
 } from '../lib/templatesAPI.js';
 import { apiRequest } from '../lib/api';
-import { calcFinancials, priceFromMargin, DEFAULT_MARGIN_PCT as _DEFAULT_MARGIN } from '../lib/calcFinancials';
+import { calcFinancials, priceFromMarkup, DEFAULT_MARKUP_PCT as _DEFAULT_MARKUP } from '../lib/calcFinancials';
 
 // API de fichas técnicas (Etapa C/D)
 const getAllSheets = () => apiRequest('/api/technical-sheets').then(r => r.data || []);
@@ -862,12 +862,12 @@ const emptyForm = {
   notes:           '',
   buffet_menu:     '',
   discount_percent: 0,
-  default_margin:  40,  // % de margem sobre preço final (padrão buffet)
+  default_margin:  40,  // % de markup sobre o custo (nome do campo mantido por compat. de banco)
 };
 
-// Margem padrão sugerida (sobre o preço final, não markup sobre custo).
-// priceFromMargin(cost, 40) = cost / 0.60 — configurável por tenant no futuro.
-const DEFAULT_MARGIN_PCT = 40;
+// Markup padrão sugerido (percentual aplicado sobre o custo).
+// priceFromMarkup(cost, 40) = cost × 1,40 — configurável por tenant no futuro.
+const DEFAULT_MARKUP_PCT = 40;
 
 const emptyItem = {
   item_name: '', quantity: 1, unit_price: 0,
@@ -880,7 +880,7 @@ const emptyFixedCost = {
   id: '', description: '', category: 'outros', amount: '', notes: '',
   // Repasse ao cliente
   pass_to_client: false,  // false = apenas custo interno
-  pass_margin:    40,     // % de margem sobre preço final (usa fórmula margem, não markup)
+  pass_margin:    40,     // % de markup sobre o custo (nome do campo mantido por compat. de banco)
   pass_label:     '',     // nome comercial na proposta ("Taxa de logística", etc.)
 };
 
@@ -907,8 +907,9 @@ const toArrayField = (value) => {
 const FIXED_COST_CATEGORIES    = ['logística','equipe','aluguel','taxas','embalagem','outros'];
 const VARIABLE_COST_CATEGORIES = ['descartável','bebida','comissão','operacional','outros'];
 
-// Limites de alerta de margem (futuramente configurável por tenant via API)
-const MARGIN_THRESHOLDS = { warning: 25, danger: 15 };
+// Limites de alerta de markup (futuramente configurável por tenant via API)
+// Equivalentes aos antigos limites de margem 25% / 15% convertidos para markup.
+const MARKUP_THRESHOLDS = { warning: 33, danger: 18 };
 
 // ─── UTILS ────────────────────────────────────────────────────────────────────
 
@@ -1704,7 +1705,7 @@ function ItemRow({ item, idx, onChange, onRemove, sheets = [], onSheetChange }) 
                   </span>
                   {unitPrice > 0 && sheetCpu > 0 && (
                     <span style={{ fontSize: 11, color: '#94a3b8' }}>
-                      Margem/un: {unitPrice > sheetCpu ? '+' : ''}R$ {fmt(unitPrice - sheetCpu)}
+                      Markup/un: {unitPrice > sheetCpu ? '+' : ''}R$ {fmt(unitPrice - sheetCpu)}
                     </span>
                   )}
                 </>
@@ -1722,8 +1723,8 @@ function ItemRow({ item, idx, onChange, onRemove, sheets = [], onSheetChange }) 
 // ─── Helper para row de custo (fixo ou variável) com repasse ─────────────────
 
 function CostRow({ c, idx, onChange, onRemove, efectiveAmount, extraFields }) {
-  const m          = Math.min(Math.max(Number(c.pass_margin) || 0, 0), 99.9);
-  const passValue  = c.pass_to_client ? priceFromMargin(efectiveAmount, m) : 0;
+  const m          = Math.max(Number(c.pass_margin) || 0, 0); // markup %, sem teto
+  const passValue  = c.pass_to_client ? priceFromMarkup(efectiveAmount, m) : 0;
   const passProfit = passValue - efectiveAmount;
   const badgeStyle = c.pass_to_client
     ? { background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' }
@@ -1754,14 +1755,13 @@ function CostRow({ c, idx, onChange, onRemove, efectiveAmount, extraFields }) {
       {c.pass_to_client && (
         <div style={{ display: 'grid', gridTemplateColumns: '80px 2fr 1fr', gap: 8, alignItems: 'center', paddingTop: 4, borderTop: '1px dashed #e2e8f0' }}>
           <div>
-            <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', marginBottom: 2 }}>Margem %</div>
+            <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', marginBottom: 2 }}>Markup %</div>
             <input
-              style={{ ...S.input, textAlign: 'right', borderColor: m >= 100 ? '#fca5a5' : '#e2e8f0' }}
-              type="number" min="0" max="99.9" step="0.5"
+              style={{ ...S.input, textAlign: 'right' }}
+              type="number" min="0" step="0.5"
               value={c.pass_margin ?? 40}
               onChange={e => onChange(idx, 'pass_margin', Number(e.target.value))}
             />
-            {m >= 100 && <div style={{ fontSize: 9, color: '#dc2626' }}>Máx 99.9%</div>}
           </div>
           <div>
             <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', marginBottom: 2 }}>Nome na proposta</div>
@@ -1798,7 +1798,7 @@ function FixedCostsSection({ fixedCosts, onAdd, onChange, onRemove }) {
   const repasseTotal = fixedCosts.reduce((s, c) => {
     if (!c.pass_to_client) return s;
     const m = Number(c.pass_margin) || 0;
-    return s + priceFromMargin(Number(c.amount) || 0, m);
+    return s + priceFromMarkup(Number(c.amount) || 0, m);
   }, 0);
 
   return (
@@ -1839,7 +1839,7 @@ function VariableCostsSection({ variableCosts, guestCount, onAdd, onChange, onRe
     if (!c.pass_to_client) return s;
     const a = Number(c.amount) || 0;
     const efetivo = c.calc_type === 'per_person' ? a * guests : a;
-    return s + priceFromMargin(efetivo, Number(c.pass_margin) || 0);
+    return s + priceFromMarkup(efetivo, Number(c.pass_margin) || 0);
   }, 0);
 
   return (
@@ -1899,7 +1899,7 @@ function SectionLabel({ label }) {
 }
 
 function FinancialSidebar({
-  fin, guestCount, defaultMargin,
+  fin, guestCount, defaultMarkup,
   onSave, loading, editingQuotation, status,
   onApprove, onCancel, onConvertToEvent,
   onApplyMarginToCosts, onDistributeGap, onAddOperationalFee,
@@ -1907,15 +1907,15 @@ function FinancialSidebar({
   const {
     subtotalItens, discountAmt, receitaItens, receitaRepasse, receitaTotal, receitaTotalPessoa,
     custoFichas, custoVariavel, custoFixo, custoTotal, custoPessoa,
-    lucro, margemReal, lucroPessoa, margemAlerta,
-    receitaRecomendada, diferencaParaMargem, precoRecomendadoPessoa,
+    lucro, markupReal, lucroPessoa, markupAlerta,
+    receitaRecomendada, diferencaParaMarkup, precoRecomendadoPessoa,
   } = fin;
 
   const hasCosts   = custoTotal > 0;
   const hasRepasse = receitaRepasse > 0;
   const guests     = Number(guestCount) || 0;
 
-  const alertStyle = margemAlerta === 'danger'
+  const alertStyle = markupAlerta === 'danger'
     ? { background: '#fee2e2', border: '1px solid #fca5a5', color: '#991b1b' }
     : { background: '#fefce8', border: '1px solid #fde047', color: '#854d0e' };
 
@@ -1960,79 +1960,93 @@ function FinancialSidebar({
         <div style={{ height: 1, background: '#f1f5f9' }} />
 
         {/* ── RESULTADO ── */}
-        {hasCosts && (
-          <div>
-            <SectionLabel label="Resultado" />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-              <FinRow label="Lucro estimado" value={`R$ ${fmt(lucro)}`} bold valueColor={lucro >= 0 ? '#16a34a' : '#dc2626'} />
-              <FinRow label="Margem real" value={`${margemReal.toFixed(1)}%`} bold valueColor={lucro >= 0 ? '#16a34a' : '#dc2626'} />
-              {guests > 0 && <FinRow label="Lucro por pessoa"  value={`R$ ${fmt(lucroPessoa)}`} muted />}
+        {(hasCosts || receitaRecomendada > 0) && (() => {
+          const totalFinal    = Math.max(receitaTotal, receitaRecomendada);
+          // Cenário A (fichas/custos internos): lucro real = receita - custoTotal
+          // Cenário B (itens manuais s/ custos): lucro projetado = totalFinal - receitaItens
+          const lucroExibido  = hasCosts ? lucro : totalFinal - receitaItens;
+          const markupExibido = hasCosts ? markupReal : Number(defaultMarkup);
+          const positivo      = lucroExibido >= 0;
+          return (
+            <div>
+              <SectionLabel label="Resultado" />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <FinRow label="Lucro estimado" value={`R$ ${fmt(lucroExibido)}`} bold valueColor={positivo ? '#16a34a' : '#dc2626'} />
+                <FinRow label={hasCosts ? 'Markup real' : 'Markup aplicado'} value={`${markupExibido.toFixed(1)}%`} bold valueColor={positivo ? '#16a34a' : '#dc2626'} />
+                {guests > 0 && <FinRow label="Lucro por pessoa" value={`R$ ${fmt(hasCosts ? lucroPessoa : lucroExibido / guests)}`} muted />}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
-        {/* Alerta de margem */}
-        {margemAlerta && (
+        {/* Alerta de markup */}
+        {markupAlerta && (
           <div style={{ ...alertStyle, borderRadius: 8, padding: '8px 10px', fontSize: 11, fontWeight: 600 }}>
-            {margemAlerta === 'danger' ? '🔴 Margem crítica' : '🟡 Margem baixa'} ({margemReal.toFixed(1)}%)
+            {markupAlerta === 'danger' ? '🔴 Markup crítico' : '🟡 Markup baixo'} ({markupReal.toFixed(1)}%)
           </div>
         )}
 
         {/* Valor total destacado */}
-        <div style={{ background: 'linear-gradient(135deg,#eff6ff,#dbeafe)', borderRadius: 12, padding: '12px 14px', border: '1px solid #bfdbfe' }}>
-          <div style={{ fontSize: 9, fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Valor total da proposta</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: '#1e40af', lineHeight: 1 }}>R$ {fmt(receitaTotal)}</div>
-          {guests > 0 && (
-            <div style={{ fontSize: 10, color: '#3b82f6', marginTop: 3 }}>R$ {fmt(receitaTotalPessoa)} / pessoa · {guests} convidados</div>
-          )}
-        </div>
+        {(() => {
+          const totalFinal = Math.max(receitaTotal, receitaRecomendada);
+          const totalFinalPessoa = guests > 0 ? totalFinal / guests : 0;
+          return (
+            <div style={{ background: 'linear-gradient(135deg,#eff6ff,#dbeafe)', borderRadius: 12, padding: '12px 14px', border: '1px solid #bfdbfe' }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Valor total da proposta</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: '#1e40af', lineHeight: 1 }}>R$ {fmt(totalFinal)}</div>
+              {guests > 0 && (
+                <div style={{ fontSize: 10, color: '#3b82f6', marginTop: 3 }}>R$ {fmt(totalFinalPessoa)} / pessoa · {guests} convidados</div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ── PRECIFICAÇÃO INTELIGENTE ── */}
         {hasCosts && (
           <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', border: '1px solid #e2e8f0' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
               🎯 Precificação Inteligente
-              <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>(margem = lucro / receita)</span>
+              <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>(markup = lucro / custo)</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-              <FinRow label="Margem desejada" value={`${Number(defaultMargin).toFixed(1)}%`} />
+              <FinRow label="Markup desejado" value={`${Number(defaultMarkup).toFixed(1)}%`} />
               <FinRow label="Receita atual" value={`R$ ${fmt(receitaTotal)}`} />
               <FinRow label="Receita recomendada" value={`R$ ${fmt(receitaRecomendada)}`} bold />
               {guests > 0 && <FinRow label="Preço/pessoa recomendado" value={`R$ ${fmt(precoRecomendadoPessoa)}`} />}
-              {diferencaParaMargem > 0.01 && (
+              {diferencaParaMarkup > 0.01 && (
                 <div style={{ marginTop: 4, fontSize: 11, color: '#b45309', fontWeight: 600, background: '#fefce8', borderRadius: 6, padding: '4px 8px' }}>
-                  Faltam R$ {fmt(diferencaParaMargem)} para atingir {Number(defaultMargin).toFixed(0)}% de margem
+                  Faltam R$ {fmt(diferencaParaMarkup)} para atingir {Number(defaultMarkup).toFixed(0)}% de markup
                 </div>
               )}
-              {diferencaParaMargem <= 0.01 && receitaTotal > 0 && (
+              {diferencaParaMarkup <= 0.01 && receitaTotal > 0 && (
                 <div style={{ marginTop: 4, fontSize: 11, color: '#166534', fontWeight: 600, background: '#f0fdf4', borderRadius: 6, padding: '4px 8px' }}>
-                  ✓ Margem desejada atingida
+                  ✓ Markup desejado atingido
                 </div>
               )}
             </div>
-            {/* Ações rápidas — sempre visíveis, desabilitadas quando margem atingida */}
+            {/* Ações rápidas — sempre visíveis, desabilitadas quando markup atingido */}
             {(onDistributeGap || onAddOperationalFee) && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 8, paddingTop: 8, borderTop: '1px dashed #e2e8f0' }}>
                 <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', marginBottom: 2 }}>Ações rápidas</div>
                 {onDistributeGap && (() => {
-                  const disabled = diferencaParaMargem <= 0.01;
+                  const disabled = diferencaParaMarkup <= 0.01;
                   return (
                     <button
                       onClick={disabled ? undefined : onDistributeGap}
                       disabled={disabled}
-                      title={disabled ? 'Margem desejada já atingida' : `Distribuir R$ ${fmt(diferencaParaMargem)} nos itens`}
+                      title={disabled ? 'Markup desejado já atingido' : `Distribuir R$ ${fmt(diferencaParaMarkup)} nos itens`}
                       style={{ width: '100%', padding: '7px', borderRadius: 8, border: '1px solid #e2e8f0', background: disabled ? '#f8fafc' : 'white', color: disabled ? '#cbd5e1' : '#475569', fontSize: 11, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer', textAlign: 'left', opacity: disabled ? 0.6 : 1 }}>
                       ↑ Distribuir diferença nos itens
                     </button>
                   );
                 })()}
                 {onAddOperationalFee && (() => {
-                  const disabled = diferencaParaMargem <= 0.01;
+                  const disabled = diferencaParaMarkup <= 0.01;
                   return (
                     <button
                       onClick={disabled ? undefined : onAddOperationalFee}
                       disabled={disabled}
-                      title={disabled ? 'Margem desejada já atingida' : `Adicionar taxa de R$ ${fmt(diferencaParaMargem)}`}
+                      title={disabled ? 'Markup desejado já atingido' : `Adicionar taxa de R$ ${fmt(diferencaParaMarkup)}`}
                       style={{ width: '100%', padding: '7px', borderRadius: 8, border: '1px solid #e2e8f0', background: disabled ? '#f8fafc' : 'white', color: disabled ? '#cbd5e1' : '#475569', fontSize: 11, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer', textAlign: 'left', opacity: disabled ? 0.6 : 1 }}>
                       + Adicionar diferença como taxa operacional
                     </button>
@@ -2079,14 +2093,14 @@ function QuotationBuilder({
 
   // Cálculo financeiro centralizado — usa engine do calcFinancials.js
   const guestCount    = Number(form.guest_count)    || 0;
-  const defaultMargin = Number(form.default_margin) || DEFAULT_MARGIN_PCT;
+  const defaultMarkup = Number(form.default_margin) || DEFAULT_MARKUP_PCT;
 
   const fin = calcFinancials({
     items, fixedCosts, variableCosts,
     discountPct:   Number(form.discount_percent) || 0,
     guestCount,
-    defaultMargin,
-    thresholds: MARGIN_THRESHOLDS,
+    defaultMarkup,
+    thresholds: MARKUP_THRESHOLDS,
   });
 
   const contactName =
@@ -2098,7 +2112,7 @@ function QuotationBuilder({
     { label: 'Convidados',   value: guestCount > 0 ? guestCount : '—',                                               icon: '👥', color: '#7c3aed' },
     { label: 'Data',         value: form.event_date ? new Date(form.event_date + 'T00:00').toLocaleDateString('pt-BR') : '—', icon: '📅', color: '#f59e0b' },
     { label: 'Custo/Pessoa', value: fin.custoTotal > 0 && guestCount > 0 ? `R$ ${fmt(fin.custoPessoa)}` : '—',       icon: '🧮', color: '#06b6d4' },
-    { label: 'Margem',       value: fin.custoTotal > 0 ? `${fin.margemReal.toFixed(1)}%` : '—',                      icon: '📊', color: fin.margemReal >= 25 ? '#16a34a' : fin.margemReal >= 15 ? '#f59e0b' : '#dc2626' },
+    { label: 'Markup',       value: fin.custoTotal > 0 ? `${fin.markupReal.toFixed(1)}%` : '—',                      icon: '📊', color: fin.markupReal >= 33 ? '#16a34a' : fin.markupReal >= 18 ? '#f59e0b' : '#dc2626' },
   ];
 
   return (
@@ -2417,12 +2431,12 @@ function QuotationBuilder({
                   placeholder="0" style={S.input} />
               </div>
               <div>
-                <label style={S.label}>Margem desejada (%)</label>
-                <input type="number" min={0} max={99.9} step="0.5"
-                  value={form.default_margin ?? DEFAULT_MARGIN_PCT}
+                <label style={S.label}>Markup desejado (%)</label>
+                <input type="number" min={0} step="0.5"
+                  value={form.default_margin ?? DEFAULT_MARKUP_PCT}
                   onChange={e => onFieldChange('default_margin', e.target.value)}
                   placeholder="40" style={{ ...S.input, borderColor: '#bfdbfe' }} />
-                <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>Margem = lucro / receita (não markup)</div>
+                <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>Markup = % sobre o custo · preço = custo × (1 + markup)</div>
               </div>
               <div>
                 <label style={S.label}>Status da Proposta</label>
@@ -2444,7 +2458,7 @@ function QuotationBuilder({
             <FinancialSidebar
               fin={fin}
               guestCount={form.guest_count}
-              defaultMargin={form.default_margin ?? DEFAULT_MARGIN_PCT}
+              defaultMarkup={form.default_margin ?? DEFAULT_MARKUP_PCT}
               onSave={onSubmit}
               loading={loading}
               editingQuotation={editingQuotation}
@@ -2842,9 +2856,9 @@ export default function BuffetQuotations({ isActive }) {
       const qty = guests > 0 ? guests : baseYield;
       const sheetCost = costPerUnit * qty;
 
-      // Preço sugerido usando margem sobre preço final: custo / (1 - margem)
-      const dm = Math.min(Math.max(Number(form.default_margin) || DEFAULT_MARGIN_PCT, 0), 99.9);
-      const suggestedPrice = priceFromMargin(costPerUnit, dm);
+      // Preço sugerido aplicando markup sobre o custo: custo × (1 + markup)
+      const dm = Math.max(Number(form.default_margin) || DEFAULT_MARKUP_PCT, 0);
+      const suggestedPrice = priceFromMarkup(costPerUnit, dm);
 
       setItems(curr => curr.map((item, i) => {
         if (i !== idx) return item;
@@ -2885,15 +2899,15 @@ export default function BuffetQuotations({ isActive }) {
     items, fixedCosts, variableCosts,
     discountPct:   Number(form.discount_percent) || 0,
     guestCount:    Number(form.guest_count) || 0,
-    defaultMargin: Math.min(Math.max(Number(form.default_margin) || DEFAULT_MARGIN_PCT, 0), 99.9),
+    defaultMarkup: Math.max(Number(form.default_margin) || DEFAULT_MARKUP_PCT, 0),
   });
 
   // Distribui a diferença faltante nos itens REAIS (exclui taxa operacional automática).
   // Isso evita distribuir em cima de uma taxa que o próprio sistema criou.
   const handleDistributeGap = () => {
     const fin  = _currentFin();
-    const diff = fin.diferencaParaMargem;
-    if (diff <= 0.01) { showMsg('error', 'A margem desejada já foi atingida. Não há diferença para distribuir.'); return; }
+    const diff = fin.diferencaParaMarkup;
+    if (diff <= 0.01) { showMsg('error', 'O markup desejado já foi atingido. Não há diferença para distribuir.'); return; }
 
     // Itens reais = todos exceto a taxa operacional criada automaticamente
     const realItems = items.filter(i => i.item_name !== OPERATIONAL_FEE_NAME);
@@ -2918,9 +2932,9 @@ export default function BuffetQuotations({ isActive }) {
   // Clicar várias vezes atualiza o mesmo item em vez de criar duplicatas.
   const handleAddOperationalFee = () => {
     const fin  = _currentFin();
-    const diff = fin.diferencaParaMargem;
+    const diff = fin.diferencaParaMarkup;
     if (diff <= 0.01) {
-      showMsg('error', 'A margem desejada já foi atingida. Não há diferença para adicionar.');
+      showMsg('error', 'O markup desejado já foi atingido. Não há diferença para adicionar.');
       return;
     }
     const newPrice = Math.round(diff * 100) / 100;
@@ -3021,7 +3035,7 @@ export default function BuffetQuotations({ isActive }) {
       notes:            full.notes            || '',
       buffet_menu:      full.buffet_menu      || '',
       discount_percent: full.discount_percent || 0,
-      default_margin:   full.default_margin   != null ? Number(full.default_margin) : DEFAULT_MARGIN_PCT,
+      default_margin:   full.default_margin   != null ? Number(full.default_margin) : DEFAULT_MARKUP_PCT,
     });
 
     // Deriva quantity_per_person = quantidade ÷ convidados originais.
@@ -3066,11 +3080,11 @@ export default function BuffetQuotations({ isActive }) {
       const cleanVariable = variableCosts.filter(c => c.description?.trim()).map(c => ({ ...c, amount: Number(c.amount) || 0 }));
 
       const guestCount    = Number(form.guest_count) || 0;
-      const defaultMargin = Math.min(Math.max(Number(form.default_margin) || DEFAULT_MARGIN_PCT, 0), 99.9);
+      const defaultMarkup = Math.max(Number(form.default_margin) || DEFAULT_MARKUP_PCT, 0);
 
-      // Calcula o total correto com margem no frontend para garantir consistência
+      // Calcula o total correto com markup no frontend para garantir consistência
       // entre o que a tela exibe e o que é gravado no banco.
-      // receitaRecomendada = custoTotal / (1 - margem) garante a margem desejada.
+      // receitaRecomendada = custoTotal × (1 + markup) garante o markup desejado.
       // Usa o maior entre o total atual e o recomendado (nunca grava abaixo da meta).
       const fin = calcFinancials({
         items,
@@ -3078,14 +3092,14 @@ export default function BuffetQuotations({ isActive }) {
         variableCosts: cleanVariable,
         discountPct:   Number(form.discount_percent) || 0,
         guestCount,
-        defaultMargin,
+        defaultMarkup,
       });
       // Total final: usa sempre o maior valor entre receita atual e receita
-      // recomendada pela margem. Isso garante que ao salvar, o total reflita
-      // a margem desejada em todos os cenários:
-      //   - Com fichas técnicas: receitaRecomendada = custoFichas / (1 - margin%)
-      //   - Sem fichas (itens manuais): receitaRecomendada = receitaItens / (1 - margin%)
-      // O PDF exportado sempre refletirá o valor correto após aplicação da margem.
+      // recomendada pelo markup. Isso garante que ao salvar, o total reflita
+      // o markup desejado em todos os cenários:
+      //   - Com fichas técnicas: receitaRecomendada = custoFichas × (1 + markup%)
+      //   - Sem fichas (itens manuais): receitaRecomendada = receitaItens × (1 + markup%)
+      // O PDF exportado sempre refletirá o valor correto após aplicação do markup.
       const finalTotal = Math.round(Math.max(fin.receitaTotal, fin.receitaRecomendada) * 100) / 100;
 
       const payload = {
@@ -3093,7 +3107,7 @@ export default function BuffetQuotations({ isActive }) {
         guest_count:      guestCount,
         event_date:       form.event_date || null,
         discount_percent: Number(form.discount_percent) || 0,
-        default_margin:   defaultMargin,
+        default_margin:   defaultMarkup,
         fixed_costs:      cleanFixed,
         variable_costs:   cleanVariable,
         total_amount:     finalTotal,

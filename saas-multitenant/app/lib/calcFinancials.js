@@ -1,40 +1,45 @@
 /**
  * calcFinancials.js — fonte única de verdade para cálculos financeiros do orçamento.
  *
- * REGRA DE MARGEM (importante):
- *   Margem = lucro / receita (sobre o preço final, não sobre o custo).
- *   Fórmula: preço = custo / (1 - margem%)
- *   Ex.: custo R$ 1.000, margem 40% → preço = 1.000 / 0.60 = R$ 1.666,67
- *   (NÃO é markup: 1.000 × 1.40 = 1.400 → margem real apenas 28.57%)
+ * REGRA DE MARKUP (importante):
+ *   Markup = lucro / custo (percentual aplicado SOBRE o custo).
+ *   Fórmula: preço = custo × (1 + markup%)
+ *   Ex.: custo R$ 1.000, markup 40% → preço = 1.000 × 1,40 = R$ 1.400,00
+ *   (NÃO é margem: margem 40% daria 1.000 / 0,60 = 1.666,67)
+ *
+ *   Relação com a margem resultante: markup 40% ⟺ margem real de ~28,57%.
+ *
+ * OBS.: os campos persistidos `default_margin` e `pass_margin` mantêm o nome
+ * por compatibilidade de banco, mas agora representam o MARKUP em %.
  *
  * Limites de alerta configuráveis por tenant (futuro: buscar de /api/tenant/settings).
  */
 
-// ─── Limites de alerta de margem ─────────────────────────────────────────────
-
-export const MARGIN_THRESHOLDS = {
-  warning: 25, // abaixo: alerta amarelo
-  danger:  15, // abaixo: alerta vermelho
+// ─── Limites de alerta de markup ─────────────────────────────────────────────
+// Equivalentes aos antigos limites de margem (25% / 15%) convertidos para markup:
+//   margem 25% ⟺ markup ~33%   |   margem 15% ⟺ markup ~18%
+export const MARKUP_THRESHOLDS = {
+  warning: 33, // abaixo: alerta amarelo
+  danger:  18, // abaixo: alerta vermelho
 };
 
-// Margem padrão do buffet (usada como sugestão inicial)
-export const DEFAULT_MARGIN_PCT = 40;
+// Markup padrão do buffet (usado como sugestão inicial)
+export const DEFAULT_MARKUP_PCT = 40;
 
-// ─── Helper: preço de venda a partir de custo + margem ───────────────────────
+// ─── Helper: preço de venda a partir de custo + markup ───────────────────────
 
 /**
- * Calcula o preço de venda usando margem sobre o preço final.
- * preço = custo / (1 - margem/100)
+ * Calcula o preço de venda aplicando markup sobre o custo.
+ * preço = custo × (1 + markup/100)
  *
- * Retorna 0 se margem >= 100 (inválido).
- * Retorna custo se margem <= 0 (sem margem = custo reembolsado).
+ * Retorna o custo quando markup <= 0 (sem acréscimo = custo reembolsado).
+ * Markup não tem teto (pode ser 100%, 200%, ...).
  */
-export function priceFromMargin(cost, marginPct) {
+export function priceFromMarkup(cost, markupPct) {
   const c = Number(cost)      || 0;
-  const m = Number(marginPct) || 0;
-  if (m >= 100) return 0;          // inválido — caller deve bloquear
-  if (m <= 0)   return c;          // sem margem: repassa custo exato
-  return c / (1 - m / 100);
+  const m = Number(markupPct) || 0;
+  if (m <= 0) return c;          // sem markup: repassa custo exato
+  return c * (1 + m / 100);
 }
 
 /**
@@ -44,12 +49,12 @@ export function priceFromMargin(cost, marginPct) {
  *   passProfit = lucro gerado pelo repasse
  *
  * Se pass_to_client = false → passValue = 0
+ * (cost.pass_margin mantém o nome do campo, mas representa o markup %)
  */
 function calcCostPass(effectiveAmount, cost) {
   if (!cost.pass_to_client) return { passValue: 0, passProfit: 0 };
   const m = Number(cost.pass_margin) || 0;
-  if (m >= 100) return { passValue: 0, passProfit: 0 }; // margem inválida
-  const passValue  = priceFromMargin(effectiveAmount, m);
+  const passValue  = priceFromMarkup(effectiveAmount, m);
   const passProfit = passValue - effectiveAmount;
   return { passValue, passProfit };
 }
@@ -64,7 +69,7 @@ function calcCostPass(effectiveAmount, cost) {
  * @param {Array}  variableCosts  - [{calc_type, amount, pass_to_client?, pass_margin?, ...}]
  * @param {number} discountPct    - desconto sobre os itens (%)
  * @param {number} guestCount     - número de convidados
- * @param {number} defaultMargin  - margem padrão da proposta (%)
+ * @param {number} defaultMarkup  - markup padrão da proposta (%)
  * @param {Object} thresholds     - override dos limites de alerta
  */
 export function calcFinancials({
@@ -73,12 +78,12 @@ export function calcFinancials({
   variableCosts = [],
   discountPct   = 0,
   guestCount    = 0,
-  defaultMargin = DEFAULT_MARGIN_PCT,
-  thresholds    = MARGIN_THRESHOLDS,
+  defaultMarkup = DEFAULT_MARKUP_PCT,
+  thresholds    = MARKUP_THRESHOLDS,
 }) {
   const safe    = (n) => (isNaN(Number(n)) || n === '' || n === null ? 0 : Number(n));
   const guests  = safe(guestCount);
-  const dm      = Math.min(Math.max(safe(defaultMargin), 0), 99.99);
+  const dm      = Math.max(safe(defaultMarkup), 0); // markup não tem teto
 
   // ── RECEITA DOS ITENS ──────────────────────────────────────────────────────
   const subtotalItens = items.reduce((s, i) => s + safe(i.quantity) * safe(i.unit_price), 0);
@@ -98,7 +103,7 @@ export function calcFinancials({
   const custoTotal = custoFichas + custoVariavel + custoFixo;
 
   // ── RECEITA DE REPASSE (custos repassados ao cliente) ─────────────────────
-  // Fórmula: passValue = custo / (1 - margem%)
+  // Fórmula: passValue = custo × (1 + markup%)
   const repPasseFixo = fixedCosts.reduce((s, c) => {
     const efetivo = safe(c.amount);
     return s + calcCostPass(efetivo, c).passValue;
@@ -119,32 +124,33 @@ export function calcFinancials({
 
   // ── RESULTADO ──────────────────────────────────────────────────────────────
   const lucro        = receitaTotal - custoTotal;
-  const margemReal   = receitaTotal > 0 ? (lucro / receitaTotal) * 100 : 0;
+  // Markup real = lucro sobre o custo (não sobre a receita).
+  const markupReal   = custoTotal > 0 ? (lucro / custoTotal) * 100 : 0;
   const lucroPessoa  = guests > 0 ? lucro / guests : 0;
 
   // ── PRECIFICAÇÃO INTELIGENTE ───────────────────────────────────────────────
-  // Receita recomendada = base de custo / (1 - margem desejada)
+  // Receita recomendada = base de custo × (1 + markup desejado)
   //
   // Cenário A — proposta com fichas técnicas / custos internos:
   //   custoTotal > 0 → usa custoTotal como base (comportamento original)
   //
   // Cenário B — proposta com itens manuais sem fichas (ex.: Proposta Personalizada):
   //   custoTotal = 0, receitaItens > 0 → usa receitaItens como custo implícito.
-  //   Nesse caso o unit_price representa o custo do item; a margem é aplicada
+  //   Nesse caso o unit_price representa o custo do item; o markup é aplicado
   //   sobre esse valor para recomendar o preço de venda ao cliente.
   //
   // Cenário C — proposta vazia (sem itens e sem custos):
   //   custoBase = 0 → receitaRecomendada = 0 (sem recomendação)
   const custoBase = custoTotal > 0 ? custoTotal : receitaItens;
-  const receitaRecomendada   = dm < 100 && custoBase > 0 ? custoBase / (1 - dm / 100) : 0;
-  const diferencaParaMargem  = receitaRecomendada - receitaTotal;
+  const receitaRecomendada   = custoBase > 0 ? custoBase * (1 + dm / 100) : 0;
+  const diferencaParaMarkup  = receitaRecomendada - receitaTotal;
   const precoRecomendadoPessoa = guests > 0 && receitaRecomendada > 0 ? receitaRecomendada / guests : 0;
 
-  // ── ALERTA DE MARGEM ──────────────────────────────────────────────────────
-  let margemAlerta = null;
+  // ── ALERTA DE MARKUP ──────────────────────────────────────────────────────
+  let markupAlerta = null;
   if (receitaTotal > 0 && custoTotal > 0) {
-    if (margemReal < thresholds.danger)        margemAlerta = 'danger';
-    else if (margemReal < thresholds.warning)  margemAlerta = 'warning';
+    if (markupReal < thresholds.danger)        markupAlerta = 'danger';
+    else if (markupReal < thresholds.warning)  markupAlerta = 'warning';
   }
 
   return {
@@ -167,14 +173,14 @@ export function calcFinancials({
 
     // Resultado
     lucro,
-    margemReal,
+    markupReal,
     lucroPessoa,
-    margemAlerta,
+    markupAlerta,
 
     // Precificação Inteligente
-    defaultMargin: dm,
+    defaultMarkup: dm,
     receitaRecomendada,
-    diferencaParaMargem,
+    diferencaParaMarkup,
     precoRecomendadoPessoa,
   };
 }

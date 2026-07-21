@@ -7,7 +7,7 @@ const templateModels = require('../models/templateModels');
  * Simula um orçamento baseado em um template
  * @param {string} template_id - ID do template
  * @param {number} number_of_guests - Número de convidados
- * @param {number} margin_percentage - Margem de lucro em percentual (ex: 30 para 30%)
+ * @param {number} margin_percentage - Markup em % sobre o custo (ex: 40 → custo × 1,40). Nome mantido por compat. da API /simulate.
  * @param {number} discount - Desconto em valor absoluto (ex: 100 para R$ 100)
  * @param {string} tenant_id - ID do tenant
  * @returns {Object} Dados da simulação
@@ -54,7 +54,8 @@ async function simulateQuotation({
   // Calcular totais
   const total_cost = calculatedItems.reduce((sum, item) => sum + item.total_cost, 0);
   
-  // Aplicar margem
+  // Aplicar markup sobre o custo: preço = custo × (1 + markup%).
+  // As chaves mantêm o prefixo `margin_` por compatibilidade da API /simulate.
   const margin_amount = (total_cost * (margin_percentage / 100));
   const price_with_margin = total_cost + margin_amount;
   
