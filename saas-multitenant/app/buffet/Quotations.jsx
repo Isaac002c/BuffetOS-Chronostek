@@ -599,7 +599,9 @@ function _buildDefaultTable(doc, quotation, clientName, co, fmtBRL, fmtDate) {
   y += 18;
 
   // ── Cardápio / Itens do Buffet — caixa de nota (opcional) ───────────────────
-  if (quotation.buffet_menu) {
+  // Na proposta personalizada, os kits já aparecem na tabela de itens acima.
+  const isPersonalizedProposal = String(quotation.event_type || '').trim().toLowerCase() === 'proposta personalizada';
+  if (quotation.buffet_menu && !isPersonalizedProposal) {
     y += 4;
     const menuLines = doc.splitTextToSize(quotation.buffet_menu, W - 2 * margin - 16);
     const boxH = menuLines.length * 5 + 16;
