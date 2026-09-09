@@ -135,13 +135,15 @@ export function calcFinancials({
   //   custoTotal > 0 → usa custoTotal como base (comportamento original)
   //
   // Cenário B — proposta com itens manuais sem fichas (ex.: Proposta Personalizada):
-  //   custoTotal = 0, receitaItens > 0 → usa receitaItens como custo implícito.
+  //   usa receitaItens como custo implícito e soma os custos fixos/variáveis.
   //   Nesse caso o unit_price representa o custo do item; o markup é aplicado
-  //   sobre esse valor para recomendar o preço de venda ao cliente.
+  //   sobre toda a base, mesmo quando também há frete ou outro custo informado.
   //
   // Cenário C — proposta vazia (sem itens e sem custos):
   //   custoBase = 0 → receitaRecomendada = 0 (sem recomendação)
-  const custoBase = custoTotal > 0 ? custoTotal : receitaItens;
+  const custoBase = custoFichas > 0
+    ? custoTotal
+    : receitaItens + custoVariavel + custoFixo;
   const receitaRecomendada   = custoBase > 0 ? custoBase * (1 + dm / 100) : 0;
   const diferencaParaMarkup  = receitaRecomendada - receitaTotal;
   const precoRecomendadoPessoa = guests > 0 && receitaRecomendada > 0 ? receitaRecomendada / guests : 0;

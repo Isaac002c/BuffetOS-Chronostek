@@ -164,6 +164,8 @@ async function generateQuotationPDF(quotation, clientName, tenantCompany = {}, p
 
   const fmtDate = (d) => {
     if (!d) return 'A definir';
+    const dateOnly = String(d).match(/^(\d{4})-(\d{2})-(\d{2})(?:T00:00:00(?:\.000)?Z)?$/);
+    if (dateOnly) return `${dateOnly[3]}/${dateOnly[2]}/${dateOnly[1]}`;
     const dt = new Date(d + (d.includes('T') ? '' : 'T00:00'));
     return dt.toLocaleDateString('pt-BR');
   };
