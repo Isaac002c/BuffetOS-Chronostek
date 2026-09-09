@@ -1906,22 +1906,16 @@ function FinancialSidebar({
   fin, guestCount, defaultMarkup,
   onSave, loading, editingQuotation, status,
   onApprove, onCancel, onConvertToEvent,
-  onApplyMarginToCosts, onDistributeGap, onAddOperationalFee,
 }) {
   const {
     subtotalItens, discountAmt, receitaItens, receitaRepasse, receitaTotal, receitaTotalPessoa,
-    custoFichas, custoVariavel, custoFixo, custoTotal, custoPessoa,
-    lucro, markupReal, lucroPessoa, markupAlerta,
-    receitaRecomendada, diferencaParaMarkup, precoRecomendadoPessoa,
+    custoFichas, custoVariavel, custoFixo, custoItensManuais, custoBase,
+    receitaRecomendada, precoRecomendadoPessoa, totalFinal, lucroFinal, markupFinal,
   } = fin;
 
-  const hasCosts   = custoTotal > 0;
+  const hasCosts   = custoBase > 0;
   const hasRepasse = receitaRepasse > 0;
   const guests     = Number(guestCount) || 0;
-
-  const alertStyle = markupAlerta === 'danger'
-    ? { background: '#fee2e2', border: '1px solid #fca5a5', color: '#991b1b' }
-    : { background: '#fefce8', border: '1px solid #fde047', color: '#854d0e' };
 
   return (
     <div style={{ ...S.card, boxShadow: '0 4px 24px rgba(0,0,0,0.07)' }}>
@@ -1950,60 +1944,40 @@ function FinancialSidebar({
         <div>
           <SectionLabel label="Custos Internos da Festa" />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {custoItensManuais > 0 && <FinRow label="Itens manuais" value={`R$ ${fmt(custoItensManuais)}`} />}
             {custoFichas > 0    && <FinRow label="Fichas técnicas"  value={`R$ ${fmt(custoFichas)}`} />}
             {custoVariavel > 0  && <FinRow label="Custos variáveis" value={`R$ ${fmt(custoVariavel)}`} />}
             {custoFixo > 0      && <FinRow label="Custos fixos"     value={`R$ ${fmt(custoFixo)}`} />}
             {hasCosts
-              ? <FinRow label="Custo total da festa" value={`R$ ${fmt(custoTotal)}`} bold />
+              ? <FinRow label="Base de cálculo" value={`R$ ${fmt(custoBase)}`} bold />
               : <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Nenhum custo interno registrado</div>
             }
-            {hasCosts && guests > 0 && <FinRow label="Custo por pessoa" value={`R$ ${fmt(custoPessoa)}`} muted />}
+            {hasCosts && guests > 0 && <FinRow label="Custo por pessoa" value={`R$ ${fmt(custoBase / guests)}`} muted />}
           </div>
         </div>
 
         <div style={{ height: 1, background: '#f1f5f9' }} />
 
         {/* ── RESULTADO ── */}
-        {(hasCosts || receitaRecomendada > 0) && (() => {
-          const totalFinal    = Math.max(receitaTotal, receitaRecomendada);
-          // Cenário A (fichas/custos internos): lucro real = receita - custoTotal
-          // Cenário B (itens manuais s/ custos): lucro projetado = totalFinal - receitaItens
-          const lucroExibido  = hasCosts ? lucro : totalFinal - receitaItens;
-          const markupExibido = hasCosts ? markupReal : Number(defaultMarkup);
-          const positivo      = lucroExibido >= 0;
-          return (
-            <div>
-              <SectionLabel label="Resultado" />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                <FinRow label="Lucro estimado" value={`R$ ${fmt(lucroExibido)}`} bold valueColor={positivo ? '#16a34a' : '#dc2626'} />
-                <FinRow label={hasCosts ? 'Markup real' : 'Markup aplicado'} value={`${markupExibido.toFixed(1)}%`} bold valueColor={positivo ? '#16a34a' : '#dc2626'} />
-                {guests > 0 && <FinRow label="Lucro por pessoa" value={`R$ ${fmt(hasCosts ? lucroPessoa : lucroExibido / guests)}`} muted />}
-              </div>
+        {hasCosts && (
+          <div>
+            <SectionLabel label="Resultado" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <FinRow label="Lucro estimado" value={`R$ ${fmt(lucroFinal)}`} bold valueColor={lucroFinal >= 0 ? '#16a34a' : '#dc2626'} />
+              <FinRow label="Markup aplicado" value={`${markupFinal.toFixed(1)}%`} bold valueColor={lucroFinal >= 0 ? '#16a34a' : '#dc2626'} />
+              {guests > 0 && <FinRow label="Lucro por pessoa" value={`R$ ${fmt(lucroFinal / guests)}`} muted />}
             </div>
-          );
-        })()}
-
-        {/* Alerta de markup */}
-        {markupAlerta && (
-          <div style={{ ...alertStyle, borderRadius: 8, padding: '8px 10px', fontSize: 11, fontWeight: 600 }}>
-            {markupAlerta === 'danger' ? '🔴 Markup crítico' : '🟡 Markup baixo'} ({markupReal.toFixed(1)}%)
           </div>
         )}
 
         {/* Valor total destacado */}
-        {(() => {
-          const totalFinal = Math.max(receitaTotal, receitaRecomendada);
-          const totalFinalPessoa = guests > 0 ? totalFinal / guests : 0;
-          return (
-            <div style={{ background: 'linear-gradient(135deg,#eff6ff,#dbeafe)', borderRadius: 12, padding: '12px 14px', border: '1px solid #bfdbfe' }}>
-              <div style={{ fontSize: 9, fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Valor total da proposta</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: '#1e40af', lineHeight: 1 }}>R$ {fmt(totalFinal)}</div>
-              {guests > 0 && (
-                <div style={{ fontSize: 10, color: '#3b82f6', marginTop: 3 }}>R$ {fmt(totalFinalPessoa)} / pessoa · {guests} convidados</div>
-              )}
-            </div>
-          );
-        })()}
+        <div style={{ background: 'linear-gradient(135deg,#eff6ff,#dbeafe)', borderRadius: 12, padding: '12px 14px', border: '1px solid #bfdbfe' }}>
+          <div style={{ fontSize: 9, fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Valor total da proposta</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: '#1e40af', lineHeight: 1 }}>R$ {fmt(totalFinal)}</div>
+          {guests > 0 && (
+            <div style={{ fontSize: 10, color: '#3b82f6', marginTop: 3 }}>R$ {fmt(totalFinal / guests)} / pessoa · {guests} convidados</div>
+          )}
+        </div>
 
         {/* ── PRECIFICAÇÃO INTELIGENTE ── */}
         {hasCosts && (
@@ -2013,51 +1987,14 @@ function FinancialSidebar({
               <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>(markup = lucro / custo)</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-              <FinRow label="Markup desejado" value={`${Number(defaultMarkup).toFixed(1)}%`} />
-              <FinRow label="Receita atual" value={`R$ ${fmt(receitaTotal)}`} />
-              <FinRow label="Receita recomendada" value={`R$ ${fmt(receitaRecomendada)}`} bold />
-              {guests > 0 && <FinRow label="Preço/pessoa recomendado" value={`R$ ${fmt(precoRecomendadoPessoa)}`} />}
-              {diferencaParaMarkup > 0.01 && (
-                <div style={{ marginTop: 4, fontSize: 11, color: '#b45309', fontWeight: 600, background: '#fefce8', borderRadius: 6, padding: '4px 8px' }}>
-                  Faltam R$ {fmt(diferencaParaMarkup)} para atingir {Number(defaultMarkup).toFixed(0)}% de markup
-                </div>
-              )}
-              {diferencaParaMarkup <= 0.01 && receitaTotal > 0 && (
-                <div style={{ marginTop: 4, fontSize: 11, color: '#166534', fontWeight: 600, background: '#f0fdf4', borderRadius: 6, padding: '4px 8px' }}>
-                  ✓ Markup desejado atingido
-                </div>
-              )}
-            </div>
-            {/* Ações rápidas — sempre visíveis, desabilitadas quando markup atingido */}
-            {(onDistributeGap || onAddOperationalFee) && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 8, paddingTop: 8, borderTop: '1px dashed #e2e8f0' }}>
-                <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', marginBottom: 2 }}>Ações rápidas</div>
-                {onDistributeGap && (() => {
-                  const disabled = diferencaParaMarkup <= 0.01;
-                  return (
-                    <button
-                      onClick={disabled ? undefined : onDistributeGap}
-                      disabled={disabled}
-                      title={disabled ? 'Markup desejado já atingido' : `Distribuir R$ ${fmt(diferencaParaMarkup)} nos itens`}
-                      style={{ width: '100%', padding: '7px', borderRadius: 8, border: '1px solid #e2e8f0', background: disabled ? '#f8fafc' : 'white', color: disabled ? '#cbd5e1' : '#475569', fontSize: 11, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer', textAlign: 'left', opacity: disabled ? 0.6 : 1 }}>
-                      ↑ Distribuir diferença nos itens
-                    </button>
-                  );
-                })()}
-                {onAddOperationalFee && (() => {
-                  const disabled = diferencaParaMarkup <= 0.01;
-                  return (
-                    <button
-                      onClick={disabled ? undefined : onAddOperationalFee}
-                      disabled={disabled}
-                      title={disabled ? 'Markup desejado já atingido' : `Adicionar taxa de R$ ${fmt(diferencaParaMarkup)}`}
-                      style={{ width: '100%', padding: '7px', borderRadius: 8, border: '1px solid #e2e8f0', background: disabled ? '#f8fafc' : 'white', color: disabled ? '#cbd5e1' : '#475569', fontSize: 11, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer', textAlign: 'left', opacity: disabled ? 0.6 : 1 }}>
-                      + Adicionar diferença como taxa operacional
-                    </button>
-                  );
-                })()}
+              <FinRow label="Base de cálculo" value={`R$ ${fmt(custoBase)}`} />
+              <FinRow label="Markup definido" value={`${Number(defaultMarkup).toFixed(1)}%`} />
+              <FinRow label="Total com markup" value={`R$ ${fmt(receitaRecomendada)}`} bold />
+              {guests > 0 && <FinRow label="Preço/pessoa com markup" value={`R$ ${fmt(precoRecomendadoPessoa)}`} />}
+              <div style={{ marginTop: 4, fontSize: 11, color: '#166534', fontWeight: 600, background: '#f0fdf4', borderRadius: 6, padding: '6px 8px' }}>
+                ✓ Markup aplicado automaticamente ao valor total
               </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -2091,7 +2028,6 @@ function QuotationBuilder({
   onVariableCostAdd, onVariableCostChange, onVariableCostRemove,
   onItemSheetChange,
   onAddBlock, onSubmit, onBack, onApprove, onCancel, onChangeTemplate, onConvertToEvent,
-  onDistributeGap, onAddOperationalFee,
 }) {
   const [showBlocks, setShowBlocks] = useState(false);
 
@@ -2106,17 +2042,21 @@ function QuotationBuilder({
     defaultMarkup,
     thresholds: MARKUP_THRESHOLDS,
   });
+  const totalFinal = fin.totalFinal;
+  const custoBase = fin.custoBase;
+  const markupFinal = fin.markupFinal;
+  const lucroFinal = fin.lucroFinal;
 
   const contactName =
     leads.find(l => String(l.id) === String(form.lead_id))?.name || 'Selecione o lead';
 
   const heroMetrics = [
-    { label: 'Valor Total',  value: `R$ ${fmt(fin.receitaTotal)}`,                                                   icon: '💰', color: '#2563eb' },
-    { label: 'Lucro Est.',   value: fin.custoTotal > 0 ? `R$ ${fmt(fin.lucro)}` : '—',                               icon: '📈', color: fin.lucro >= 0 ? '#16a34a' : '#dc2626' },
+    { label: 'Valor Total',  value: `R$ ${fmt(totalFinal)}`,                                                        icon: '💰', color: '#2563eb' },
+    { label: 'Lucro Est.',   value: custoBase > 0 ? `R$ ${fmt(lucroFinal)}` : '—',                                  icon: '📈', color: lucroFinal >= 0 ? '#16a34a' : '#dc2626' },
     { label: 'Convidados',   value: guestCount > 0 ? guestCount : '—',                                               icon: '👥', color: '#7c3aed' },
     { label: 'Data',         value: form.event_date ? new Date(form.event_date + 'T00:00').toLocaleDateString('pt-BR') : '—', icon: '📅', color: '#f59e0b' },
-    { label: 'Custo/Pessoa', value: fin.custoTotal > 0 && guestCount > 0 ? `R$ ${fmt(fin.custoPessoa)}` : '—',       icon: '🧮', color: '#06b6d4' },
-    { label: 'Markup',       value: fin.custoTotal > 0 ? `${fin.markupReal.toFixed(1)}%` : '—',                      icon: '📊', color: fin.markupReal >= 33 ? '#16a34a' : fin.markupReal >= 18 ? '#f59e0b' : '#dc2626' },
+    { label: 'Custo/Pessoa', value: custoBase > 0 && guestCount > 0 ? `R$ ${fmt(custoBase / guestCount)}` : '—',     icon: '🧮', color: '#06b6d4' },
+    { label: 'Markup',       value: custoBase > 0 ? `${markupFinal.toFixed(1)}%` : '—',                              icon: '📊', color: markupFinal >= 33 ? '#16a34a' : markupFinal >= 18 ? '#f59e0b' : '#dc2626' },
   ];
 
   return (
@@ -2470,8 +2410,6 @@ function QuotationBuilder({
               onApprove={onApprove}
               onCancel={onCancel}
               onConvertToEvent={onConvertToEvent}
-              onDistributeGap={onDistributeGap}
-              onAddOperationalFee={onAddOperationalFee}
             />
           </div>
         </div>
@@ -2889,75 +2827,6 @@ export default function BuffetQuotations({ isActive }) {
     }
   };
 
-  // ── Precificação Inteligente ─────────────────────────────────────────────────
-
-  // Identificador da taxa operacional criada automaticamente.
-  // Usamos item_name como marcador para detectar e atualizar (não duplicar).
-  const OPERATIONAL_FEE_NAME = 'Taxa operacional';
-
-  // Calcula a diferença faltante usando o estado atual completo.
-  // receitaTotal já inclui: itens + custos repassados + taxa operacional existente.
-  // Portanto, se já foi adicionada taxa suficiente OU custos repassados cobrem,
-  // diff será <= 0 e as ações ficam desabilitadas.
-  const _currentFin = () => calcFinancials({
-    items, fixedCosts, variableCosts,
-    discountPct:   Number(form.discount_percent) || 0,
-    guestCount:    Number(form.guest_count) || 0,
-    defaultMarkup: Math.max(Number(form.default_margin) || DEFAULT_MARKUP_PCT, 0),
-  });
-
-  // Distribui a diferença faltante nos itens REAIS (exclui taxa operacional automática).
-  // Isso evita distribuir em cima de uma taxa que o próprio sistema criou.
-  const handleDistributeGap = () => {
-    const fin  = _currentFin();
-    const diff = fin.diferencaParaMarkup;
-    if (diff <= 0.01) { showMsg('error', 'O markup desejado já foi atingido. Não há diferença para distribuir.'); return; }
-
-    // Itens reais = todos exceto a taxa operacional criada automaticamente
-    const realItems = items.filter(i => i.item_name !== OPERATIONAL_FEE_NAME);
-    const totalVenda = realItems.reduce((s, i) => s + (Number(i.quantity) || 0) * (Number(i.unit_price) || 0), 0);
-    if (totalVenda <= 0) { showMsg('error', 'Adicione itens com valor de venda antes de distribuir.'); return; }
-
-    setItems(curr => curr.map(i => {
-      // Taxa operacional: não mexe
-      if (i.item_name === OPERATIONAL_FEE_NAME) return i;
-      const subtItem  = (Number(i.quantity) || 0) * (Number(i.unit_price) || 0);
-      const prop      = subtItem / totalVenda;
-      const acrescimo = prop * diff;
-      const qty       = Number(i.quantity) || 1;
-      const newPrice  = qty > 0 ? (subtItem + acrescimo) / qty : Number(i.unit_price);
-      return { ...i, unit_price: Math.round(newPrice * 100) / 100 };
-    }));
-    showMsg('success', `Diferença de R$ ${fmt(diff)} distribuída nos itens da proposta.`);
-  };
-
-  // Adiciona (ou atualiza) a taxa operacional com APENAS a diferença faltante.
-  // A diferença já considera: itens + custos repassados + taxa existente.
-  // Clicar várias vezes atualiza o mesmo item em vez de criar duplicatas.
-  const handleAddOperationalFee = () => {
-    const fin  = _currentFin();
-    const diff = fin.diferencaParaMarkup;
-    if (diff <= 0.01) {
-      showMsg('error', 'O markup desejado já foi atingido. Não há diferença para adicionar.');
-      return;
-    }
-    const newPrice = Math.round(diff * 100) / 100;
-    const existingIdx = items.findIndex(i => i.item_name === OPERATIONAL_FEE_NAME);
-
-    if (existingIdx >= 0) {
-      // Atualiza a taxa existente em vez de criar nova (evita duplicata)
-      setItems(curr => curr.map((item, i) =>
-        i === existingIdx ? { ...item, quantity: 1, unit_price: newPrice } : item
-      ));
-      showMsg('success', `Taxa operacional atualizada para R$ ${fmt(newPrice)}.`);
-    } else {
-      // Cria nova taxa somente quando não existe nenhuma
-      const feeItem = { ...emptyItem, item_name: OPERATIONAL_FEE_NAME, quantity: 1, unit_price: newPrice };
-      setItems(curr => [...curr, feeItem]);
-      showMsg('success', `"Taxa operacional" de R$ ${fmt(newPrice)} adicionada.`);
-    }
-  };
-
   // ── Handlers de Custos Fixos (Etapa A) ──────────────────────────────────────
   const handleFixedCostAdd    = () => setFixedCosts(c => [...c, { ...emptyFixedCost, id: Date.now().toString() }]);
   const handleFixedCostChange = (idx, field, value) => setFixedCosts(c => c.map((x, i) => i === idx ? { ...x, [field]: value } : x));
@@ -3104,7 +2973,7 @@ export default function BuffetQuotations({ isActive }) {
       //   - Com fichas técnicas: receitaRecomendada = custoFichas × (1 + markup%)
       //   - Sem fichas (itens manuais): receitaRecomendada = receitaItens × (1 + markup%)
       // O PDF exportado sempre refletirá o valor correto após aplicação do markup.
-      const finalTotal = Math.round(Math.max(fin.receitaTotal, fin.receitaRecomendada) * 100) / 100;
+      const finalTotal = Math.round(fin.totalFinal * 100) / 100;
 
       const payload = {
         ...form,
@@ -3322,8 +3191,6 @@ export default function BuffetQuotations({ isActive }) {
           onCancel={() => editingQuotation && handleCancel(editingQuotation)}
           onChangeTemplate={() => setView('template-gallery')}
           onConvertToEvent={() => handleConvertToEvent(null)}
-          onDistributeGap={handleDistributeGap}
-          onAddOperationalFee={handleAddOperationalFee}
         />
       )}
 

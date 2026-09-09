@@ -141,12 +141,14 @@ export function calcFinancials({
   //
   // Cenário C — proposta vazia (sem itens e sem custos):
   //   custoBase = 0 → receitaRecomendada = 0 (sem recomendação)
-  const custoBase = custoFichas > 0
-    ? custoTotal
-    : receitaItens + custoVariavel + custoFixo;
+  const custoItensManuais = custoFichas > 0 ? 0 : receitaItens;
+  const custoBase = custoTotal + custoItensManuais;
   const receitaRecomendada   = custoBase > 0 ? custoBase * (1 + dm / 100) : 0;
   const diferencaParaMarkup  = receitaRecomendada - receitaTotal;
   const precoRecomendadoPessoa = guests > 0 && receitaRecomendada > 0 ? receitaRecomendada / guests : 0;
+  const totalFinal           = Math.max(receitaTotal, receitaRecomendada);
+  const lucroFinal           = totalFinal - custoBase;
+  const markupFinal          = custoBase > 0 ? (lucroFinal / custoBase) * 100 : 0;
 
   // ── ALERTA DE MARKUP ──────────────────────────────────────────────────────
   let markupAlerta = null;
@@ -172,6 +174,8 @@ export function calcFinancials({
     custoFixo,
     custoTotal,
     custoPessoa,
+    custoItensManuais,
+    custoBase,
 
     // Resultado
     lucro,
@@ -184,5 +188,8 @@ export function calcFinancials({
     receitaRecomendada,
     diferencaParaMarkup,
     precoRecomendadoPessoa,
+    totalFinal,
+    lucroFinal,
+    markupFinal,
   };
 }
