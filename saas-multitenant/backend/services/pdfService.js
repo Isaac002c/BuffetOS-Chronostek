@@ -28,7 +28,12 @@ function generateProposalHTML(proposalData) {
     validity_days = 30,
   } = proposalData;
 
-  const eventDateFormatted = new Date(event_date).toLocaleDateString('pt-BR');
+  // event_date é uma data civil, não um instante. Usar os componentes recebidos
+  // impede que o fuso do servidor transforme 30/09 em 29/09.
+  const dateParts = String(event_date || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const eventDateFormatted = dateParts
+    ? `${dateParts[3]}/${dateParts[2]}/${dateParts[1]}`
+    : 'A definir';
   const validityDate = new Date();
   validityDate.setDate(validityDate.getDate() + validity_days);
   const validityDateFormatted = validityDate.toLocaleDateString('pt-BR');

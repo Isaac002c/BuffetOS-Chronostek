@@ -39,6 +39,17 @@ const COMPANY = {
   cnpj:    '',
 };
 
+// Datas de evento são datas civis (sem horário). Formatar pelos componentes
+// evita que o fuso do navegador transforme, por exemplo, 30/09 em 29/09.
+function formatCivilDateBR(value) {
+  if (!value) return 'A definir';
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'A definir' : date.toLocaleDateString('pt-BR');
+}
+
 // ─── OVERLAY: coordenadas de preço para cada PDF da Valéria ──────────────────
 // Extraídas via pdfplumber. Sistema de coordenadas:
 //   pdfplumber: origem topo-esq, y aumenta ↓  (top = distância do topo)
@@ -162,13 +173,7 @@ async function generateQuotationPDF(quotation, clientName, tenantCompany = {}, p
   const fmtBRL = (n) =>
     Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-  const fmtDate = (d) => {
-    if (!d) return 'A definir';
-    const dateOnly = String(d).match(/^(\d{4})-(\d{2})-(\d{2})(?:T00:00:00(?:\.000)?Z)?$/);
-    if (dateOnly) return `${dateOnly[3]}/${dateOnly[2]}/${dateOnly[1]}`;
-    const dt = new Date(d + (d.includes('T') ? '' : 'T00:00'));
-    return dt.toLocaleDateString('pt-BR');
-  };
+  const fmtDate = formatCivilDateBR;
 
   const safeName = (clientName || 'cliente').replace(/[^a-z0-9]/gi, '_').toLowerCase();
 
@@ -488,7 +493,7 @@ function _buildDefaultTable(doc, quotation, clientName, co, fmtBRL, fmtDate) {
   doc.setFontSize(9);
   doc.setTextColor(...GRAY);
   doc.text(`Nº ${String(quotation.id).slice(0, 8).toUpperCase()}`, W - margin, y, { align: 'right' });
-  doc.text(`Emitido em: ${fmtDate(new Date().toISOString())}`, W - margin, y + 5, { align: 'right' });
+  doc.text(`Emitido em: ${new Date().toLocaleDateString('pt-BR')}`, W - margin, y + 5, { align: 'right' });
 
   y += 10;
   doc.setDrawColor(...BORDER);
@@ -2429,9 +2434,7 @@ function QuotationBuilder({
 
 function QuotationCard({ quotation, getClientName, onEdit, onDuplicate, onApprove, onCancel, onDelete, onConvertToEvent, onExportPDF }) {
   const [hovered, setHovered] = useState(false);
-  const eventDate = quotation.event_date
-    ? new Date(quotation.event_date + (quotation.event_date.includes('T') ? '' : 'T00:00')).toLocaleDateString('pt-BR')
-    : '—';
+  const eventDate = quotation.event_date ? formatCivilDateBR(quotation.event_date) : '—';
 
   return (
     <div style={{
